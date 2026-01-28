@@ -4,6 +4,7 @@ import platform
 import shutil
 import matplotlib.pyplot as plt
 
+
 def traceroute(ip):
     # Use appropriate command based on platform
     plat = platform.system().lower()
@@ -20,13 +21,13 @@ def traceroute(ip):
                 "Neither 'traceroute' nor 'tracepath' found. "
                 "Please install traceroute: sudo apt-get install traceroute"
             )
-    
+
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
     except subprocess.TimeoutExpired:
         print(f"Traceroute to {ip} timed out")
         return []
-    
+
     hops = []
 
     for line in result.stdout.splitlines():
@@ -38,6 +39,7 @@ def traceroute(ip):
             hops.append(avg_rtt)
 
     return hops
+
 
 ################################
 # should be do more work for give a .csv file (contain ips) and return a list contain random 5 ip addresses
@@ -54,7 +56,7 @@ for ip in ips:
     rtt_increase = [hops[0]]
     for i in range(len(hops)):
         if i > 0:
-            rtt_increase.append(hops[i] - hops[i-1])
+            rtt_increase.append(hops[i] - hops[i - 1])
     hop_rtt_increase.append(rtt_increase)
 
 print(hop_rtts_list)
@@ -65,7 +67,7 @@ print(hop_rtt_increase)
 #   GET Stacked bar chart
 #############################
 plt.figure()
-bottom = [0]*len(ips)
+bottom = [0] * len(ips)
 for hop_idx in range(max(len(h) for h in hop_rtt_increase)):
     hop_values = []
     for h in hop_rtt_increase:
