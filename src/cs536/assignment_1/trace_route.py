@@ -1,10 +1,32 @@
 import subprocess
 import re
+import platform
+import shutil
 import matplotlib.pyplot as plt
 
 def traceroute(ip):
-    cmd = ["tracert", ip]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    # Use appropriate command based on platform
+    plat = platform.system().lower()
+    if "windows" in plat:
+        cmd = ["tracert", ip]
+    else:
+        # Check which traceroute command is available
+        if shutil.which("traceroute"):
+            cmd = ["traceroute", "-m", "30", ip]
+        elif shutil.which("tracepath"):
+            cmd = ["tracepath", "-m", "30", ip]
+        else:
+            raise RuntimeError(
+                "Neither 'traceroute' nor 'tracepath' found. "
+                "Please install traceroute: sudo apt-get install traceroute"
+            )
+    
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        print(f"Traceroute to {ip} timed out")
+        return []
+    
     hops = []
 
     for line in result.stdout.splitlines():
