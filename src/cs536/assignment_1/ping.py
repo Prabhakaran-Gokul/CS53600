@@ -48,8 +48,8 @@ def fetch_ip_list(
     ips: set[str] = set()
     for server in servers:
         ip = server.get("ip", "")
-        # Only add valid IPv4 addresses (skip hostnames)
-        if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip):
+        # Add both IPv4 addresses and hostnames
+        if ip and ip.strip():
             ips.add(ip)
 
     # Save to file
@@ -177,7 +177,7 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
     dlat = lat2 - lat1
     dlon = lon2 - lon1
     a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
-    c = 2 * math.asin(math.sqrt(a))
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
     # Earth's radius in kilometers
     r = 6371
@@ -208,7 +208,7 @@ def read_ips_from_file(filepath: Path) -> list[str]:
 def plot_distance_vs_rtt(
     results: list[dict[str, str | dict[str, float] | dict[str, str | float] | None]],
     my_location: dict[str, str | float],
-    output_file: str = "distance_vs_rtt.pdf",
+    output_file: Path = ASSIGNMENT_1_PATH / "results" / "distance_vs_rtt.pdf",
 ):
     """Create a scatter plot of distance vs RTT.
 
@@ -280,8 +280,8 @@ def plot_distance_vs_rtt(
 
 
 def main(
-    file: Optional[Path] = ASSIGNMENT_1_PATH / "ip_addresses.txt",
-    output: str = "distance_vs_rtt.pdf",
+    file: Optional[Path] = ASSIGNMENT_1_PATH / "results" / "ip_addresses.txt",
+    output: Path = ASSIGNMENT_1_PATH / "results" / "distance_vs_rtt.pdf",
     count: int = 4,
     timeout: int = 3,
     limit: Optional[int] = None,
