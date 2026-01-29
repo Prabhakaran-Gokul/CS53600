@@ -81,11 +81,15 @@ def tracrt(target_host):
     return lines
 
 '''
-Finds the IP addresses listed in input_file
+Finds the IP addresses listed in input, usua;lly a txt file
+Each line should be 1 IP address
 Plots rounds trip time to each intermediate hop and plots them
 Stores them in latency.pdf
 '''
 def run(input):
+    '''
+    Read file with IP addresses. Usually a txt file. 
+    '''
     input_file = open(input, 'r')
     target_hosts = []
     for line in input_file.readlines():
