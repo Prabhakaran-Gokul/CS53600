@@ -85,7 +85,8 @@ def tracrt(target_host):
 
 
 """
-Finds the IP addresses listed in input_file
+Finds the IP addresses listed in input text file
+Each line should be 1 IP address
 Plots rounds trip time to each intermediate hop and plots them
 Stores them in latency.pdf
 """
@@ -102,6 +103,7 @@ def run(input_file: Path = ASSIGNMENT_1_PATH / "traceroute_input.txt"):
     ip_to_hop_to_rtt = {}
 
     for host in target_hosts:
+        print("Working with host " + str(host))
         tracrt_res = tracrt(host)
         # tracrt_res = lines_one
         if tracrt_res is None:
