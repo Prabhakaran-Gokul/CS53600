@@ -87,13 +87,27 @@ def ping_host(ip: str, count: int = 4, timeout: int = 3) -> dict[str, float] | N
     except subprocess.CalledProcessError as e:
         return None
 
-    # Parsing statistics lines like:
-    # rtt min/avg/max/mdev = 10.123/15.432/20.345/2.123 ms
-    match = re.search(r"= ([0-9\.]+)/([0-9\.]+)/([0-9\.]+)", output)
-    if not match:
-        return None
-
-    min_rtt, avg_rtt, max_rtt = map(float, match.groups())
+    # Parse based on platform
+    if "windows" in plat:
+        # Windows format: Minimum = 10ms, Maximum = 20ms, Average = 15ms
+        min_match = re.search(r"Minimum = ([0-9]+)ms", output)
+        max_match = re.search(r"Maximum = ([0-9]+)ms", output)
+        avg_match = re.search(r"Average = ([0-9]+)ms", output)
+        
+        if not (min_match and max_match and avg_match):
+            return None
+        
+        min_rtt = float(min_match.group(1))
+        max_rtt = float(max_match.group(1))
+        avg_rtt = float(avg_match.group(1))
+    else:
+        # Linux/Mac format: rtt min/avg/max/mdev = 10.123/15.432/20.345/2.123 ms
+        match = re.search(r"= ([0-9\.]+)/([0-9\.]+)/([0-9\.]+)", output)
+        if not match:
+            return None
+        
+        min_rtt, avg_rtt, max_rtt = map(float, match.groups())
+    
     return {"min": min_rtt, "avg": avg_rtt, "max": max_rtt}
 
 
