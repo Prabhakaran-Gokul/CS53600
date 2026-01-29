@@ -1,7 +1,8 @@
-import subprocess
-import re
 import platform
+import re
 import shutil
+import subprocess
+
 import matplotlib.pyplot as plt
 
 
