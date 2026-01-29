@@ -96,6 +96,7 @@ def run(input):
     ip_to_hop_to_rtt = {}
 
     for host in target_hosts:
+        print("Working with host " + str(host))
         tracrt_res = tracrt(host)
         #tracrt_res = lines_one
         if tracrt_res is None:
@@ -106,7 +107,7 @@ def run(input):
         hops.append(len(hop_to_rtt.keys()))
         rtts.append(rtt)
 
-
+    
     fig, axes  = plt.subplots(1, 2, figsize = (13, 5))
 
     hop_to_rtt_all = rtt_by_hop(ip_to_hop_to_rtt, max(hops))
@@ -140,7 +141,7 @@ def run(input):
 
     plt.tight_layout()
     plt.show()
-
+    
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
