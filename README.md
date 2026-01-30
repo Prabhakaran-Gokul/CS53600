@@ -40,7 +40,15 @@ A Python tool that measures network latency to various servers worldwide, geoloc
 - Fully automated with customizable parameters
 - Outputs results as PDF plots
 
+### Side Notes
+- Part 2 will randomly select 5 IP addresses from https://iperf3serverlist.net/api/servers
+
 ### Usage
+
+Run both part 1 and part 2:
+```
+python -m cs536.assignment_1.run_assignment_1
+```
 
 Run the ping script as a module:
 
