@@ -1,12 +1,12 @@
 from pathlib import Path
 from subprocess import PIPE, Popen
-
+import random
 import pandas as pd
 import tyro
 from matplotlib import pyplot as plt
 
 from cs536.assignment_1 import ASSIGNMENT_1_PATH
-
+from cs536.assignment_1 import ping
 
 def sort_trace(lines):
     cleaned_lines = []
@@ -83,20 +83,26 @@ def tracrt(target_host):
 
     return lines
 
+"""
+randomly selects 5 ip addresses
+"""
+def get_random_ip_addresses():
+        url = "https://iperf3serverlist.net/api/servers"
+        ip_list = ping.fetch_ip_list(url)
+
+        random_addresses = random.sample(ip_list, 5)
+
+        return random_addresses
 
 """
-Finds the IP addresses listed in input text file
-Each line should be 1 IP address
-Plots rounds trip time to each intermediate hop and plots them
+Finds rounds trip time to each intermediate hop and plots them
 Stores them in latency.pdf
 """
-
-
 def run(input_file: Path = ASSIGNMENT_1_PATH / "traceroute_input.txt"):
-    input_file = open(input_file, "r")
-    target_hosts = []
-    for line in input_file.readlines():
-        target_hosts.append(line.strip())
+    #input_file = open(input_file, "r")
+    target_hosts = get_random_ip_addresses()
+    #for line in input_file.readlines():
+     #   target_hosts.append(line.strip())
 
     rtts = []
     hops = []
