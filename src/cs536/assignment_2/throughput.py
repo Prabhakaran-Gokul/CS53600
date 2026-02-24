@@ -80,6 +80,24 @@ def format_bps(bps: float) -> str:
 
     return f"{val} bits / s"
 
+def store_q2_result(ip_used : List[str], tcp_stats : List[pd.DataFrame], frames: List[pd.DataFrame]):
+    """
+        Stores the required part of q2 in a csv 
+    """
+    
+
+    for ip, tcp_stat, frame in zip(ip_used, tcp_stats, frames):
+        tcp_stat["ip"] = ip
+        frame["ip"] = ip
+
+    tcp_all = pd.concat(tcp_stats, ignore_index=True) if tcp_stats else pd.DataFrame()
+    frames_all = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+    combined = pd.concat([tcp_all, frames_all], axis = 1, sort=False)
+    out_csv = ASSIGNMENT_2_PATH / "results" / "q2_combined.csv"
+    combined.to_csv(out_csv, index=False)
+
+
 def plot_1c(frames : List[pd.DataFrame], used_ips : List[str], summary_rows : List[Dict[str, float]]):
     """
     Creates the plot and table for 1 c
@@ -128,12 +146,8 @@ def plot_1c(frames : List[pd.DataFrame], used_ips : List[str], summary_rows : Li
     table_stored_path = ASSIGNMENT_2_PATH / "results" / "1c_table.png"
     plt.savefig(table_stored_path)
 
-def store_q2_result():
-    """
-        Stores the required part of q2 in a csv 
-    """
 
-def plot_2b(ip_used : List[str], tcp_stats : List[Dict[str, float]], frames: List[pd.DataFrame]):
+def plot_2b(ip_used : List[str], tcp_stats : List[pd.DataFrame], frames: List[pd.DataFrame]):
 
     
 
@@ -206,7 +220,7 @@ def plot_2b(ip_used : List[str], tcp_stats : List[Dict[str, float]], frames: Lis
     axes[1].set_title(f"goodput_bps vs rtt_us {ip}")
     axes[1].grid(True, alpha=0.3)
 
-    axes[2].scatter(throughput_df['goodput_bps'], tcp_stat['loss_signal'])
+    axes[2].scatter(throughput_df['goodput_bps'], tcp_stat['total_retrans'])
     axes[2].set_xlabel("goodput_bps")
     axes[2].set_ylabel(f"total_retrans (loss_signal)")
     axes[2].set_title(f"goodput_bps vs loss_signal {ip}")
@@ -264,6 +278,7 @@ def run(n : int = 2, duration: int = 10, interval: float = 1.0,
             continue
         success_counter += 1
 
+    store_q2_result(ip_used= used_ips, tcp_stats= tcp_summary, frames = frames)
     if q1:
         plot_1c(frames=frames, used_ips=used_ips, summary_rows=summary_rows)
 
