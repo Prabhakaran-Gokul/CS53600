@@ -18,6 +18,7 @@ import numpy as np
 from dataclasses import dataclass
 from typing import Dict
 import math
+from cs536.assignment_2.tcp_stats import TCPSample, sample_tcp_info
 
 
 # ----- Protocol constants (from Wireshark's iperf3 dissector) -----
@@ -56,18 +57,8 @@ def recv_state_or_json(sock: socket.socket):
     first = hdr[0]
     if first in KNOWN_STATES:
         return 0 # 0 is ok, a state
-    
     return -1 # -1 is directly json
 
-    '''
-    # Otherwise treat as JSON length-prefixed blob
-    if len(hdr) < 4:
-        raise TimeoutError("need 4 bytes for JSON length prefix")
-    (n,) = struct.unpack("!I", hdr)
-    if n <= 0 or n > 50_000_000:
-        raise RuntimeError(f"unexpected control framing (first bytes={hdr!r}, len={n})")
-    return ("json", json_read(sock))         # consumes 4+n bytes
-    '''
 
 def set_common_sockopts(sock: socket.socket, *, nodelay=True, keepalive=True, timeout_sec=10.0):
     sock.settimeout(timeout_sec)
@@ -154,8 +145,10 @@ def resolve_target(host: str, port: int) -> Tuple[str, int]:
     # Let the OS do the right thing (IPv4/IPv6), but we return the host as given.
     return (host, port)
 
-#def run_iperf3_tcp_client(server: str, port: int, duration: int, parallel: int, blksize: int,
-#                          omit: int, connect_timeout: float, read_timeout: float, verbose: bool) -> int:
+
+'''
+You can ignore this method
+'''
 def run_iperf3_tcp_client(server: str, port: int, duration: int, connect_timeout: float, verbose: bool) -> int:
 
     ## some constants: 
@@ -237,20 +230,6 @@ def run_iperf3_tcp_client(server: str, port: int, duration: int, connect_timeout
         data_threads: List[DataSender] = []
         data_socks: List[socket.socket] = []
         stop_event = threading.Event()
-        '''
-        payload = os.urandom(blksize)  # iperf3 can send zeroes or random; servers don't inspect payload
-        for i in range(parallel):
-            ds = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            ds.settimeout(connect_timeout)
-            ds.connect(resolve_target(server, port))
-            set_common_sockopts(ds, timeout_sec=read_timeout)
-            sender = DataSender(ds, cookie=cookie, payload=payload, stop_event=stop_event)
-            data_threads.append(sender)
-            data_socks.append(ds)
-            
-        if verbose:
-            print(f"[data] {parallel} TCP data stream(s) connected")
-        '''
         payload = os.urandom(131072)  ## default block size 128 kb
         ds = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         ds.settimeout(connect_timeout)
@@ -474,9 +453,13 @@ def sample_goodput_bytes_acked(sock: socket.socket, sample_interval: float, dura
 
 
 # ---------------- iperf3 one-stream runner with TCP_INFO sampling ----------------
-
+'''
+Mehtod used in Q1 and Q2
+'''
 def run_one_destination_with_sampling(host: str, port: int, duration: float, interval: float, verbose: bool = False
                                      ) -> Tuple[pd.DataFrame, Dict[str, float]]:
+#def run_one_destination_with_sampling(host_socekt: socket, port: int, duration: float, interval: float, verbose: bool = False
+#                                     ) -> Tuple[pd.DataFrame, Dict[str, float]]:
     """
     This is the one to use for 1c) where results are returned by interval
     Connect to the iperf3 server (control channel), create 1 TCP data stream,
@@ -538,6 +521,8 @@ def run_one_destination_with_sampling(host: str, port: int, duration: float, int
     if st == TEST_START:
         st = await_state([TEST_RUNNING], "await TEST_RUNNING")
 
+    ## also start extracting TCP statistics (Q2)
+    tcp_stats : List[Dict[str, float]] = sample_tcp_info(sock= sender.sock, sample_interval= interval, duration=duration)
     # ----- sampling loop: bytes_acked every 'interval' seconds -----
     samples = sample_goodput_bytes_acked(sender.sock, sample_interval=interval, duration=duration)
 
@@ -589,6 +574,7 @@ def run_one_destination_with_sampling(host: str, port: int, duration: float, int
         stats = {"min": 0.0, "median": 0.0, "avg": 0.0, "p95": 0.0}
     else:
         vals = df["goodput_bps"].astype(float).values
+        #tcp_stats["goodput_bps"] = vals
         stats = {
             "min": float(np.min(vals)),
             "median": float(np.median(vals)),
@@ -596,7 +582,7 @@ def run_one_destination_with_sampling(host: str, port: int, duration: float, int
             "p95": float(np.percentile(vals, 95)),
         }
 
-    return df, stats
+    return df, stats, tcp_stats
 
 
 def main(    server: str,

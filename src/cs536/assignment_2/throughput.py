@@ -80,46 +80,11 @@ def format_bps(bps: float) -> str:
 
     return f"{val} bits / s"
 
-def run_on_host(ip : str, duration : float, interval : float, verbose: bool = False) -> Tuple[pd.DataFrame, Dict[str, float]]:
-
-    df, stats = run_one_destination_with_sampling(host= ip, port = 5201, interval=interval, duration=duration, verbose=verbose)
-
-    return df, stats
-
-def run(n : int = 2, duration: int = 10, interval: float = 1.0, verbose: bool = False):
-    ''''
-    runs on n hosts and retry on failure
-    '''
-    frames = []
-    summary_rows = []
-    success_counter = 0
-    used_ips = []
-    ip_list: List[str] = fetch_ip_list()
-    ip_list = ["185.93.1.65", "109.61.86.65", "185.152.67.2", "195.181.162.195", "185.59.223.8", "66.35.22.79", "209.40.123.215",
-               "109.61.86.65"] # for testing
-
-    while success_counter < n:
-
-        target_ip = random.choice(ip_list)
-        try:
-            ip_list.remove(target_ip)
-        except ValueError:
-            continue
-
-        try:
-            print(f"\n=== {target_ip} | duration={duration}s | interval={interval}s ===")
-            df, stats = run_on_host(ip=target_ip, duration=duration,interval=interval,verbose=verbose)
-            print(f"  min={format_bps(stats['min'])}, median={format_bps(stats['median'])}, "
-              f"avg={format_bps(stats['avg'])}, p95={format_bps(stats['p95'])}")
-            frames.append(df)
-            summary_rows.append(stats)
-            used_ips.append(target_ip)
-        except (TimeoutError, ConnectionError, OSError, RuntimeError) as e:
-            print(f"[error] error on ip {target_ip}: {e}")
-            continue
-        success_counter += 1
-
-    ## plotting time series, currently the y axis is in scientific notation because the value is large
+def plot_1c(frames : List[pd.DataFrame], used_ips : List[str], summary_rows : List[Dict[str, float]]):
+    """
+    Creates the plot and table for 1 c
+    """
+        ## plotting time series, currently the y axis is in scientific notation because the value is large
     ## TODO: sanity check of goodut value
     fig, ax = plt.subplots(figsize=(12, 6))
 
@@ -163,9 +128,152 @@ def run(n : int = 2, duration: int = 10, interval: float = 1.0, verbose: bool = 
     table_stored_path = ASSIGNMENT_2_PATH / "results" / "1c_table.png"
     plt.savefig(table_stored_path)
 
+def store_q2_result():
+    """
+        Stores the required part of q2 in a csv 
+    """
+
+def plot_2b(ip_used : List[str], tcp_stats : List[Dict[str, float]], frames: List[pd.DataFrame]):
+
+    
+
+    ## pick first ip
+    ip: str = ip_used[0]
+    tcp_stat: pd.DataFrame = tcp_stats[0]
+    throughput_df: pd.DataFrame = frames[0]
+
+    ## i)
+    nrows, ncols = 4, 1
+    fig, axes = plt.subplots(nrows, ncols, figsize=(12 * ncols, 6 * nrows))
+
+    axes[0].scatter(tcp_stat['ts'], tcp_stat['snd_cwnd'])
+    axes[0].plot(tcp_stat['ts'], tcp_stat['snd_cwnd'], label = ip)
+    axes[0].set_xlabel("Timestamp")
+    axes[0].set_ylabel(f"snd_cwnd")
+    axes[0].set_title("snd_cwnd")
+    axes[0].grid(True, alpha=0.3)
+    axes[0].legend(title="Destination", loc="best")
+
+    axes[1].scatter(tcp_stat['ts'], tcp_stat['rtt_us'])
+    axes[1].plot(tcp_stat['ts'], tcp_stat['rtt_us'], label = ip)
+    axes[1].set_xlabel("Timestamp")
+    axes[1].set_ylabel(f"rtt_us")
+    axes[1].set_title("rtt_us")
+    axes[1].grid(True, alpha=0.3)
+    axes[1].legend(title="Destination", loc="best")
+
+    #if not tcp_stat["total_retrans"] == -1:
+    axes[2].scatter(tcp_stat['ts'], tcp_stat['total_retrans'])
+    axes[2].plot(tcp_stat['ts'], tcp_stat['total_retrans'], label = ip)
+    axes[2].set_xlabel("Timestamp")
+    axes[2].set_ylabel(f"total_retrans (loss signal)")
+    axes[2].set_title("total_retrans (loss signal)")
+    axes[2].grid(True, alpha=0.3)
+    axes[2].legend(title="Destination", loc="best")
+
+    axes[3].scatter(throughput_df['t_mid'], throughput_df['goodput_bps'])
+    axes[3].plot(throughput_df['t_mid'], throughput_df['goodput_bps'], label = ip)
+    axes[3].set_xlabel("Timestamp")
+    axes[3].set_ylabel(f"goodput_bps")
+    axes[3].set_title("goodput_bps")
+    axes[3].grid(True, alpha=0.3)
+    axes[3].legend(title="Destination", loc="best")
+
+    plt.tight_layout()
+    time_series_stored_path = ASSIGNMENT_2_PATH / "results" / "2b_i.png"
+    plt.savefig(time_series_stored_path)
+
+    
+    '''
+    ii) Scatter plots showing relationships:
+        • snd cwnd vs goodput,
+        • RTT vs goodput,
+        • loss signal (e.g., # retransmissions or # timeouts) vs goodput.
+    '''
+
+    nrows, ncols = 3, 1
+    fig, axes = plt.subplots(nrows, ncols, figsize = (ncols * 12, nrows * 6))
+
+    axes[0].scatter(throughput_df['goodput_bps'], tcp_stat['snd_cwnd'])
+    axes[0].set_xlabel("goodput_bps")
+    axes[0].set_ylabel(f"snd_cwnd")
+    axes[0].set_title(f"goodput_bps vs snd_cwnd {ip}")
+    axes[0].grid(True, alpha=0.3)
+
+    axes[1].scatter(throughput_df['goodput_bps'], tcp_stat['rtt_us'])
+    axes[1].set_xlabel("goodput_bps")
+    axes[1].set_ylabel(f"rtt_us")
+    axes[1].set_title(f"goodput_bps vs rtt_us {ip}")
+    axes[1].grid(True, alpha=0.3)
+
+    axes[2].scatter(throughput_df['goodput_bps'], tcp_stat['loss_signal'])
+    axes[2].set_xlabel("goodput_bps")
+    axes[2].set_ylabel(f"total_retrans (loss_signal)")
+    axes[2].set_title(f"goodput_bps vs loss_signal {ip}")
+    axes[2].grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    scatter_stored_path = ASSIGNMENT_2_PATH / "results" / "2b_ii.png"
+    plt.savefig(scatter_stored_path)
+
+
+
+
+
+def run_on_host(ip : str, duration : float, interval : float,
+                 verbose: bool = False) -> Tuple[pd.DataFrame, Dict[str, float], pd.DataFrame]:
+
+    df, stats, tcp_stats = run_one_destination_with_sampling(host= ip, port = 5201, interval=interval, duration=duration, verbose=verbose)
+
+    return df, stats, tcp_stats
+
+def run(n : int = 2, duration: int = 10, interval: float = 1.0, 
+        verbose: bool = False, q1: bool = True, q2:bool = True):
+    ''''
+    runs on n hosts and retry on failure
+    '''
+    frames: List[pd.DataFrame] = []
+    summary_rows: List[Dict[str, float]] = []
+    tcp_summary: List[pd.DataFrame] = []
+    success_counter: int = 0
+    used_ips: List[str] = []
+    ip_list: List[str] = fetch_ip_list()
+    ip_list = ["160.242.19.254",
+        "185.93.1.65", "109.61.86.65", "185.152.67.2", "195.181.162.195", "185.59.223.8", "66.35.22.79", "209.40.123.215",
+               "109.61.86.65"] # for testing
+
+    while success_counter < n:
+
+        target_ip = random.choice(ip_list)
+        try:
+            ip_list.remove(target_ip)
+        except ValueError:
+            continue
+
+        try:
+            print(f"\n=== {target_ip} | duration={duration}s | interval={interval}s ===")
+            df, stats, tcp_stats = run_on_host(ip=target_ip, duration=duration,interval=interval,verbose=verbose)
+            print(f"  min={format_bps(stats['min'])}, median={format_bps(stats['median'])}, "
+              f"avg={format_bps(stats['avg'])}, p95={format_bps(stats['p95'])}")
+            frames.append(df)
+            summary_rows.append(stats)
+            used_ips.append(target_ip)
+            tcp_summary.append(tcp_stats)
+        except (TimeoutError, ConnectionError, OSError, RuntimeError) as e:
+            print(f"[error] error on ip {target_ip}: {e}")
+            continue
+        success_counter += 1
+
+    if q1:
+        plot_1c(frames=frames, used_ips=used_ips, summary_rows=summary_rows)
+
+    if q2:
+        plot_2b(ip_used=used_ips, tcp_stats=tcp_summary, frames=frames)
+
+
 
 '''
-    Example: PYTHONPATH=src python3 -m cs536.assignment_2.throughput --n 4 --duration 10 --interval 1 --verbose
+    Example: PYTHONPATH=src python3 -m cs536.assignment_2.throughput --n 4 --duration 10 --interval 1 --verbose --q1 --q2
 '''
 
 if __name__ == "__main__":
