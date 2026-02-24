@@ -2,7 +2,6 @@
 # A minimal-but-robust iperf3-compatible TCP client (control+data) for public servers.
 # Implements: control handshake, JSON param exchange, data streams, timed send, results exchange, clean termination.
 
-import argparse
 import json
 import os
 import random
@@ -14,6 +13,11 @@ import time
 from typing import List, Tuple, Optional
 from typing import Literal
 import tyro
+import pandas as pd
+import numpy as np
+from dataclasses import dataclass
+from typing import Dict
+import math
 
 
 # ----- Protocol constants (from Wireshark's iperf3 dissector) -----
@@ -392,6 +396,209 @@ def run_iperf3_tcp_client(server: str, port: int, duration: int, connect_timeout
             pass
         return 2
 
+def _get_bytes_acked_linux(sock: socket.socket) -> int:
+    """
+    Read tcpi_bytes_acked from TCP_INFO via getsockopt on Linux.
+
+    We use a defensive approach: request a reasonably large buffer and scan a few
+    candidate offsets for an unsigned 64-bit counter. This is robust across
+    minor kernel layout variations.
+
+    Returns:
+        int: Current bytes_acked on this socket (monotonic).
+
+    Raises:
+        OSError if TCP_INFO is not available or bytes_acked cannot be located.
+    """
+    TCP_INFO = getattr(socket, "TCP_INFO", None)
+    if TCP_INFO is None:
+        raise OSError("TCP_INFO not supported on this platform")
+
+    buf = sock.getsockopt(socket.IPPROTO_TCP, TCP_INFO, 512)
+    (bytes_acked,) = struct.unpack_from("Q", buf, 120)
+    return bytes_acked
+
+    #return int(best_val)
+
+
+@dataclass
+class Sample:
+    t: float
+    bytes_acked: int
+
+
+def sample_goodput_bytes_acked(sock: socket.socket, sample_interval: float, duration: float) -> List[Sample]:
+    """
+    Periodically sample tcpi_bytes_acked for 'duration' seconds at 'sample_interval' frequency.
+    Returns a list of time-stamped samples.
+
+    We align the first sample at t=0 (baseline), then collect ~floor(duration / interval) additional samples.
+    """
+    t0 = time.time()
+    samples: List[Sample] = []
+
+    # Initial baseline (t=0)
+    try:
+        b0 = _get_bytes_acked_linux(sock)
+    except OSError as e:
+        raise OSError(f"TCP_INFO sampling failed: {e}. This feature requires Linux.") from e
+    samples.append(Sample(t=0.0, bytes_acked=b0))
+
+    # Periodic samples
+    next_t = t0 + sample_interval
+    while True:
+        now = time.time()
+        remaining = (t0 + duration) - now
+        if remaining <= 0:
+            break
+        if now < next_t:
+            time.sleep(min(0.005, next_t - now))
+            continue
+        # Take a sample
+        try:
+            bi = _get_bytes_acked_linux(sock)
+        except OSError as e:
+            # Propagate to caller; better to fail fast than silently degrade
+            raise
+        t_rel = now - t0
+        samples.append(Sample(t=t_rel, bytes_acked=bi))
+        next_t += sample_interval
+
+    # Final boundary sample at t=duration (if we didn't land exactly on it)
+    last_t = samples[-1].t if samples else 0.0
+    if duration - last_t > (sample_interval / 4.0):
+        bi = _get_bytes_acked_linux(sock)
+        samples.append(Sample(t=duration, bytes_acked=bi))
+
+    return samples
+
+
+# ---------------- iperf3 one-stream runner with TCP_INFO sampling ----------------
+
+def run_one_destination_with_sampling(host: str, port: int, duration: float, interval: float, verbose: bool = False
+                                     ) -> Tuple[pd.DataFrame, Dict[str, float]]:
+    """
+    This is the one to use for 1c) where results are returned by interval
+    Connect to the iperf3 server (control channel), create 1 TCP data stream,
+    send for 'duration' seconds, and in parallel sample bytes_acked at 'interval'.
+    Returns:
+        df: DataFrame with columns [t_mid, goodput_bps, destination]
+        stats: dict with min/median/avg/p95 (bits/s)
+    """
+    # ----- control connection -----
+    cookie = generate_cookie()
+    ctrl = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    ctrl.settimeout(8.0)
+    ctrl.connect(resolve_target(host, port))
+    set_common_sockopts(ctrl)
+    ctrl.sendall(cookie)
+    if verbose:
+        print(f"[control] connected to {host}:{port}, cookie len={len(cookie)}")
+
+    def await_state(expected: List[int], context: str) -> int:
+        st = recv_state(ctrl)
+        if verbose:
+            print(f"[control] state {st} ({context})")
+        if st in (-1, -2):
+            raise RuntimeError("ACCESS_DENIED" if st == -1 else "SERVER_ERROR")
+        return st
+
+    st = await_state([PARAM_EXCHANGE], "await PARAM_EXCHANGE")
+    if st != PARAM_EXCHANGE and verbose:
+        print("[warn] unexpected state; proceeding to send parameters")
+
+    params = {
+        "tcp": True,
+        "time": max(1, int(math.ceil(duration))),
+        "num": 0,
+        "blockcount": 0,
+        "pacing_timer": DEFAULT_PACING_TIMER_MS,
+    }
+    if verbose:
+        print(f"[control] send_parameters: {params}")
+    json_write(ctrl, params)
+
+    st = await_state([CREATE_STREAMS], "await CREATE_STREAMS")
+
+    # ----- data stream -----
+    payload = b"\x00" * 131072  # 128 KiB blocks (payload contents are irrelevant to server)
+    ds = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    ds.settimeout(8.0)
+    ds.connect(resolve_target(host, port))
+    set_common_sockopts(ds)
+
+    stop_event = __import__("threading").Event()
+    sender = DataSender(ds, cookie=cookie, payload=payload, stop_event=stop_event)
+    sender.start()
+    if verbose:
+        print("[data] started 1 TCP data stream")
+
+    # ----- test start/run -----
+    st = await_state([TEST_START, TEST_RUNNING], "await TEST_START/TEST_RUNNING")
+    if st == TEST_START:
+        st = await_state([TEST_RUNNING], "await TEST_RUNNING")
+
+    # ----- sampling loop: bytes_acked every 'interval' seconds -----
+    samples = sample_goodput_bytes_acked(sender.sock, sample_interval=interval, duration=duration)
+
+    # ----- stop sender and close -----
+    stop_event.set()
+    sender.join(timeout=5.0)
+
+    send_state(ctrl, TEST_END)
+    st = await_state([EXCHANGE_RESULTS], "await EXCHANGE_RESULTS")
+    # Send minimal results back (iperf3 server is tolerant)
+    results = {
+        "cpu_util_total": 0.0,
+        "cpu_util_user": 0.0,
+        "cpu_util_system": 0.0,
+        "sender_has_retransmits": 0,
+        "streams": [{"id": 1, "bytes": sender.bytes_sent, "retransmits": -1, "jitter": 0, "errors": 0, "packets": 0}],
+    }
+    json_write(ctrl, results)
+
+    # Server may send DISPLAY_RESULTS and/or JSON; finalize with IPERF_DONE
+    try:
+        st2 = recv_state(ctrl)
+        if verbose:
+            print(f"[control] post-results state {st2}")
+    except Exception:
+        pass
+    send_state(ctrl, IPERF_DONE)
+    try:
+        ctrl.close()
+    except Exception:
+        pass
+
+    # ----- compute per-interval goodput from samples -----
+    # Use consecutive deltas: goodput_bps = (Δbytes_acked * 8) / Δt
+    rows = []
+    for i in range(1, len(samples)):
+        t_prev, b_prev = samples[i - 1].t, samples[i - 1].bytes_acked
+        t_curr, b_curr = samples[i].t, samples[i].bytes_acked
+        #dt = max(1e-9, t_curr - t_prev)
+        db = max(0, b_curr - b_prev)  # ensure non-negative (monotonic guard)
+        bps = (db * 8.0) / interval
+        t_mid = 0.5 * (t_prev + t_curr)
+        rows.append({"t_mid": t_mid, "goodput_bps": bps})
+
+    df = pd.DataFrame(rows)
+    df["destination"] = f"{host}:{port}"
+
+    if len(df) == 0:
+        stats = {"min": 0.0, "median": 0.0, "avg": 0.0, "p95": 0.0}
+    else:
+        vals = df["goodput_bps"].astype(float).values
+        stats = {
+            "min": float(np.min(vals)),
+            "median": float(np.median(vals)),
+            "avg": float(np.mean(vals)),
+            "p95": float(np.percentile(vals, 95)),
+        }
+
+    return df, stats
+
+
 def main(    server: str,
     port: int = DEFAULT_PORT,
     duration: int = 60,
@@ -417,5 +624,5 @@ if __name__ == "__main__":
     tyro.cli(main)
 
     '''
-    Example: python -m cs536.assigment_2.iperf3_tcp_client --server 185.93.1.65 --duration 15 --verbose
+    Example: PYTHONPATH=src python3 -m cs536.assignment_2.iperf3_tcp_client --server 185.93.1.65 --duration 15 --verbose
     '''
