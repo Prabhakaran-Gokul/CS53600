@@ -88,7 +88,7 @@ def store_q2_result(ip_used : List[str], tcp_stats : List[pd.DataFrame], frames:
 
     for ip, tcp_stat, frame in zip(ip_used, tcp_stats, frames):
         tcp_stat["ip"] = ip
-        frame["ip"] = ip
+        #frame["ip"] = ip
 
     tcp_all = pd.concat(tcp_stats, ignore_index=True) if tcp_stats else pd.DataFrame()
     frames_all = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
