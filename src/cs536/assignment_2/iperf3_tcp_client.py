@@ -406,7 +406,13 @@ class Sample:
     bytes_acked: int
 
 
-def sample_goodput_bytes_acked(sock: socket.socket, sample_interval: float, duration: float) -> List[Sample]:
+def sample_goodput_bytes_acked(
+    sock: socket.socket,
+    sample_interval: float,
+    duration: float,
+    *,
+    is_alive_fn=None,
+) -> List[Sample]:
     """
     Periodically sample tcpi_bytes_acked for 'duration' seconds at 'sample_interval' frequency.
     Returns a list of time-stamped samples.
@@ -418,6 +424,8 @@ def sample_goodput_bytes_acked(sock: socket.socket, sample_interval: float, dura
 
     # Initial baseline (t=0)
     try:
+        if is_alive_fn is not None and not is_alive_fn():
+            return []
         b0 = _get_bytes_acked_linux(sock)
     except OSError as e:
         raise OSError(f"TCP_INFO sampling failed: {e}. This feature requires Linux.") from e
@@ -435,9 +443,13 @@ def sample_goodput_bytes_acked(sock: socket.socket, sample_interval: float, dura
             continue
         # Take a sample
         try:
+            if is_alive_fn is not None and not is_alive_fn():
+                break
             bi = _get_bytes_acked_linux(sock)
         except OSError as e:
-            # Propagate to caller; better to fail fast than silently degrade
+            # If sender died or socket closed, stop sampling gracefully.
+            if is_alive_fn is not None and not is_alive_fn():
+                break
             raise
         t_rel = now - t0
         samples.append(Sample(t=t_rel, bytes_acked=bi))
@@ -446,8 +458,12 @@ def sample_goodput_bytes_acked(sock: socket.socket, sample_interval: float, dura
     # Final boundary sample at t=duration (if we didn't land exactly on it)
     last_t = samples[-1].t if samples else 0.0
     if duration - last_t > (sample_interval / 4.0):
-        bi = _get_bytes_acked_linux(sock)
-        samples.append(Sample(t=duration, bytes_acked=bi))
+        try:
+            if is_alive_fn is None or is_alive_fn():
+                bi = _get_bytes_acked_linux(sock)
+                samples.append(Sample(t=duration, bytes_acked=bi))
+        except OSError:
+            pass
 
     return samples
 
@@ -521,14 +537,40 @@ def run_one_destination_with_sampling(host: str, port: int, duration: float, int
     if st == TEST_START:
         st = await_state([TEST_RUNNING], "await TEST_RUNNING")
 
-    ## also start extracting TCP statistics (Q2)
-    tcp_stats : List[Dict[str, float]] = sample_tcp_info(sock= sender.sock, sample_interval= interval, duration=duration)
+    # ----- sample TCP stats and goodput concurrently for the same duration -----
+    tcp_stats_holder: dict = {}
+    import threading
+
+    def _tcp_stats_worker():
+        try:
+            tcp_stats_holder["df"] = sample_tcp_info(
+                sock=sender.sock,
+                sample_interval=interval,
+                duration=duration,
+            )
+        except Exception as e:
+            tcp_stats_holder["error"] = e
+            tcp_stats_holder["df"] = pd.DataFrame()
+
+    tcp_thread = threading.Thread(target=_tcp_stats_worker, daemon=True)
+    tcp_thread.start()
+
     # ----- sampling loop: bytes_acked every 'interval' seconds -----
-    samples = sample_goodput_bytes_acked(sender.sock, sample_interval=interval, duration=duration)
+    samples = sample_goodput_bytes_acked(
+        sender.sock,
+        sample_interval=interval,
+        duration=duration,
+        is_alive_fn=sender.is_alive,
+    )
 
     # ----- stop sender and close -----
     stop_event.set()
     sender.join(timeout=5.0)
+    tcp_thread.join(timeout=2.0)
+    if sender.error is not None:
+        err_name = type(sender.error).__name__
+        msg = str(sender.error)
+        raise RuntimeError(f"data socket ended early ({err_name}: {msg})")
 
     send_state(ctrl, TEST_END)
     st = await_state([EXCHANGE_RESULTS], "await EXCHANGE_RESULTS")
@@ -582,6 +624,7 @@ def run_one_destination_with_sampling(host: str, port: int, duration: float, int
             "p95": float(np.percentile(vals, 95)),
         }
 
+    tcp_stats = tcp_stats_holder.get("df", pd.DataFrame())
     return df, stats, tcp_stats
 
 

@@ -23,6 +23,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
 from cs536.assignment_2.iperf3_tcp_client import run_one_destination_with_sampling
+import os
 
 
 def fetch_ip_list(
@@ -64,6 +65,14 @@ def fetch_ip_list(
     return list(sorted(ips))
 
 
+def fetch_ip_from_file(
+    file: Path = ASSIGNMENT_2_PATH / "results" / "ip_addresses.txt",
+) -> list[str]:
+    ips = []
+    with open(file, "r", encoding="utf-8") as f:
+        ips.append(f.readline().strip())
+
+    return list(sorted(ips))
 
 
 def format_bps(bps: float) -> str:
@@ -241,7 +250,7 @@ def run_on_host(ip : str, duration : float, interval : float,
 
     return df, stats, tcp_stats
 
-def run(n : int = 2, duration: int = 10, interval: float = 1.0, 
+def run(file : str = "", n : int = 2, duration: int = 10, interval: float = 1.0, 
         verbose: bool = False, q1: bool = True, q2:bool = True):
     ''''
     runs on n hosts and retry on failure
@@ -251,10 +260,13 @@ def run(n : int = 2, duration: int = 10, interval: float = 1.0,
     tcp_summary: List[pd.DataFrame] = []
     success_counter: int = 0
     used_ips: List[str] = []
-    ip_list: List[str] = fetch_ip_list()
-    ip_list = ["160.242.19.254",
-        "185.93.1.65", "109.61.86.65", "185.152.67.2", "195.181.162.195", "185.59.223.8", "66.35.22.79", "209.40.123.215",
-               "109.61.86.65"] # for testing
+    if not os.path.exists(file):
+        ip_list: List[str] = fetch_ip_list()
+    else:
+        ip_list: List[str] = fetch_ip_from_file(file=file)
+    #ip_list = ["160.242.19.254",
+    #    "185.93.1.65", "109.61.86.65", "185.152.67.2", "195.181.162.195", "185.59.223.8", "66.35.22.79", "209.40.123.215",
+    #           "109.61.86.65", "37.19.216.1", "66.35.30.9", "173.243.131.29", "185.59.221.51", "96.45.40.45"] # for testing
 
     while success_counter < n:
 
@@ -288,7 +300,7 @@ def run(n : int = 2, duration: int = 10, interval: float = 1.0,
 
 
 '''
-    Example: PYTHONPATH=src python3 -m cs536.assignment_2.throughput --n 4 --duration 10 --interval 1 --verbose --q1 --q2
+    Example: PYTHONPATH=src python3 -m cs536.assignment_2.throughput --n 5 --duration 60 --interval 1 --verbose --q1 --q2
 '''
 
 if __name__ == "__main__":
