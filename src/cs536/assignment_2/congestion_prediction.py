@@ -22,7 +22,6 @@ def prep_data(
     csv_path: Path = ASSIGNMENT_2_PATH / "results" / "q2_combined.csv",
     alpha: float = 0.1,
     beta: float = 0.1,
-    get_all: bool = False,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     part a) of q3 building the dataset 
@@ -83,9 +82,6 @@ def prep_data(
         group["objective"] = group["goodput_bps"].shift(-1) - alpha * group["rtt_us"].shift(-1) - beta * group["loss"].shift(-1)
         group['y_target'] = group["objective"]
         out.append(group)
-
-        if not get_all:
-            break
 
 
 
@@ -224,6 +220,7 @@ def predict_next_cwnd(
         y_test = y_test_dict[ip]
         feat_train = feat_train_dict[ip]
         feat_test = feat_test_dict[ip]
+        print(f"========Predicting for address {ip}========")
         train_snd_cwnd, test_snd_cwnd, train_snd_cwnd_times, test_snd_cwnd_times, pred_snd_cwnd = predict_next_cwnd_for_trace(x_train, x_test, y_train, y_test, feat_train, feat_test )
 
         train_snd_cwnd_dict[ip] = train_snd_cwnd
@@ -294,7 +291,7 @@ def predict_next_cwnd_for_trace(
         y_test : pd.DataFrame, feat_train : pd.DataFrame, feat_test: pd.DataFrame
 ) -> Tuple[List[float], List[float], List[float], List[float], List[float]]:
     """
-    Performts periction
+    Performts prediction
     """
 
     ## alpha and beta
@@ -374,6 +371,12 @@ def predict_next_cwnd_for_trace(
 
 if __name__ == "__main__":
     predict_next_cwnd()
+
+
+'''
+    Example: PYTHONPATH=src python3 -m cs536.assignment_2.congestion_prediction
+
+'''
 
 
 

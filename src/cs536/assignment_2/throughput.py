@@ -70,7 +70,9 @@ def fetch_ip_from_file(
 ) -> list[str]:
     ips = []
     with open(file, "r", encoding="utf-8") as f:
-        ips.append(f.readline().strip())
+        lines = f.readlines()
+        for line in lines:
+            ips.append(line.strip())
 
     return list(sorted(ips))
 
