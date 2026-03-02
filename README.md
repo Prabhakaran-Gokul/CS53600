@@ -26,6 +26,31 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 uv sync
 ```
 
+## Assigment 2: iPerf, TCP Statistics, and Congestion Control
+
+## Requirements
+- WSL or Ubuntu 22.04
+- Docker
+- Python 3
+
+Building the docker image, from the project root
+```
+docker build -f src/cs536/assignment_2/Dockerfile -t cs536-a2 .
+```
+
+Running the code:
+```
+docker run --rm cs536-a2
+```
+The current docker file will take 5 IP addresses from `results\ip_addresses.txt`. It will perform Iperf communication with these 5 servers for 60 seconds at 1 second intervals. 
+Input expections of python command in docker file:
+- `--file` is required and is the path to the file with the IP addresses
+- `--n` is the number of IP addresses
+- `--duration` is the duration of the exchange
+- `--interval` is the interval
+
+###
+
 ## Assignment 1: Network Latencies, Ping and Traceroute
 
 A Python tool that measures network latency to various servers worldwide, geolocates them, and visualizes the relationship between geographic distance and round-trip time (RTT).
