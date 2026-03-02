@@ -13,6 +13,7 @@ import pandas as pd
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import GridSearchCV, TimeSeriesSplit, train_test_split
+import matplotlib.pyplot as plt
 
 from typing import List, Tuple
 from cs536.assignment_2 import ASSIGNMENT_2_PATH
@@ -105,7 +106,8 @@ def get_split(
     x : pd.DataFrame, 
     y : pd.DataFrame,
     feat : pd.DataFrame,
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+#) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+) -> Tuple[dict[str, pd.DataFrame], dict[str, pd.DataFrame], dict[str, pd.DataFrame], dict[str, pd.DataFrame]]:
     """
     Splits into train and test
 
@@ -140,40 +142,59 @@ def get_split(
     feat_train_list = []
     feat_test_list = []
 
+
+    x_train_dict = {}
+    x_test_dict = {}
+    y_train_dict = {}
+    y_test_dict = {}
+    feat_train_dict = {}
+    feat_test_dict = {}
+
     for ip,x_group in x.groupby("destination"):
         #x_train, x_test, y_train, y_test = get_last_n(x[])
         y_group = y.loc[x_group.index]  # align labels to this destination group
         feat_group = feat.loc[x_group.index]
-        x_train, x_test, y_train, y_test, feat_train, feat_test= get_last_n(x_group, y_group, feat_group, n=3)
+        x_train, x_test, y_train, y_test, feat_train, feat_test= get_last_n(x_group, y_group, feat_group, n=10)
+        '''
         x_train_list.append(x_train)
         x_test_list.append(x_test)
         y_train_list.append(y_train)
         y_test_list.append(y_test)
         feat_train_list.append(feat_train)
         feat_test_list.append(feat_test)
-
+        '''
+        x_train_dict[ip] = x_train
+        x_test_dict[ip] = x_test
+        y_train_dict[ip] = y_train
+        y_test_dict[ip] = y_test
+        feat_train_dict[ip] = feat_train
+        feat_test_dict[ip] = feat_test
+        
+    '''
     x_train = pd.concat(x_train_list)
     x_test = pd.concat(x_test_list)
     y_train = pd.concat(y_train_list)
     y_test = pd.concat(y_test_list)
     feat_train = pd.concat(feat_train_list)
     feat_test = pd.concat(feat_test_list)
-
     return x_train, x_test, y_train, y_test, feat_train, feat_test
+    '''
+
+    return x_train_dict, x_test_dict, y_train_dict, y_test_dict, feat_train_dict, feat_test_dict
 
 
 
 
 def objective_function(X : pd.DataFrame, y : pd.DataFrame,
                     key_col : str = "destination", ts_col : str = "ts",
-                    alpha : float = 0.1, beta : float = 0.1):
+                    alpha : float = 0.1, beta : float = 0.1) -> float:
 
     sid = X[key_col].to_numpy()
     valid = sid[1:] == sid[:-1] ## mask of what is valid 
 
     return (X['goodput_bps'][1:] - alpha * X['rtt_us'][1:] - beta * X['loss'][1:])[valid]
 
-def singe_ip_objective(X, alpha : float = 0.1, beta : float = 0.1):
+def singe_ip_objective(X, alpha : float = 0.1, beta : float = 0.1) -> float:
     return (X['goodput_bps'][1:] - alpha * X['rtt_us'][1:] - beta * X['loss'][1:])
 
 
@@ -181,18 +202,104 @@ def predict_next_cwnd(
     csv_path:  Path = ASSIGNMENT_2_PATH / "results" / "q2_combined.csv"
 ):
     """
-    Performts periction
+    does prediction for every data point in the given csv file
     """
+    train_snd_cwnd_dict = {}
+    test_snd_cwnd_dict = {} 
+    train_snd_cwnd_times_dict = {} 
+    test_snd_cwnd_times_dict = {} 
+    pred_snd_cwnd_dict = {}
 
-    ## alpha and beta
-    alpha = 0.1
-    beta = 0.1
-        
     # 1) Load data
     x, y, feat_df = prep_data(csv_path)
 
     # 2) get split
-    x_train, x_test, y_train, y_test, feat_train, feat_test = get_split(x, y, feat_df)
+    x_train_dict, x_test_dict, y_train_dict, y_test_dict, feat_train_dict, feat_test_dict = get_split(x, y, feat_df)
+
+    # 3) call on ip
+    for ip in  list(x_train_dict.keys()):
+        x_train = x_train_dict[ip]
+        x_test = x_test_dict[ip]
+        y_train = y_train_dict[ip]
+        y_test = y_test_dict[ip]
+        feat_train = feat_train_dict[ip]
+        feat_test = feat_test_dict[ip]
+        train_snd_cwnd, test_snd_cwnd, train_snd_cwnd_times, test_snd_cwnd_times, pred_snd_cwnd = predict_next_cwnd_for_trace(x_train, x_test, y_train, y_test, feat_train, feat_test )
+
+        train_snd_cwnd_dict[ip] = train_snd_cwnd
+        test_snd_cwnd_dict[ip] = test_snd_cwnd
+        train_snd_cwnd_times_dict[ip] = train_snd_cwnd_times 
+        test_snd_cwnd_times_dict[ip] = test_snd_cwnd_times 
+        pred_snd_cwnd_dict[ip] = pred_snd_cwnd
+
+    plot(train_snd_cwnd_dict, test_snd_cwnd_dict, train_snd_cwnd_times_dict,
+        test_snd_cwnd_times_dict, pred_snd_cwnd_dict)
+
+
+def plot(
+        train_snd_cwnd_dict : dict[str, List[float]], test_snd_cwnd_dict : dict[str, List[float]],
+        train_snd_cwnd_times_dict: dict[str, List[float]],
+        test_snd_cwnd_times_dict: dict[str, List[float]], pred_snd_cwnd_dict: dict[str, List[float]]
+):
+    """ 
+    For each IP, produces 2 plots 
+    1. time series of train  snd_cwnd
+    2. time sereis of test snd_cwnd and predicted snd_cwnd
+    
+    """
+
+    nrows, ncols = 5, 2
+    #fig, axes = plt.subplots(nrows, ncols, figsize=(6 * ncols, 6 * nrows))
+
+    #axes = axes.ravel()
+
+    counter = 0
+    for ip in list(train_snd_cwnd_dict.keys()):
+
+        fig, axes = plt.subplots(2, 1, figsize = (12, 12))
+
+        ## first pot
+        axes[0].scatter(train_snd_cwnd_times_dict[ip], train_snd_cwnd_dict[ip])
+        axes[0].set_xlabel(f"Timestamp (MS)")
+        axes[0].set_ylabel(f"Train snd_cwnd")
+        axes[0].set_title(f"{ip}")
+        axes[0].grid(True, alpha=0.3)
+        
+
+        ## second plot
+        axes[1].scatter(test_snd_cwnd_times_dict[ip], test_snd_cwnd_dict[ip], label = 'Actual')
+        axes[1].scatter(test_snd_cwnd_times_dict[ip], pred_snd_cwnd_dict[ip], label = 'Predicted')
+        axes[1].set_xlabel(f"Timestamp (MS)")
+        axes[1].set_ylabel(f"Tet snd_cwnd")
+        axes[1].set_title(f"{ip}")
+        axes[1].grid(True, alpha=0.3)
+        axes[1].legend(title="Label", loc="best")
+        
+
+
+        ## increment and stop when counter reaches 5
+        counter += 1
+        if counter >= 5:
+            break
+        plt.tight_layout()
+        q3_stored_path = ASSIGNMENT_2_PATH / "results" / f"q3_{counter}.png"
+        plt.savefig(q3_stored_path)
+    #plt.show()
+
+    
+
+
+def predict_next_cwnd_for_trace(
+        x_train : pd.DataFrame, x_test : pd.DataFrame, y_train: pd.DataFrame, 
+        y_test : pd.DataFrame, feat_train : pd.DataFrame, feat_test: pd.DataFrame
+) -> Tuple[List[float], List[float], List[float], List[float], List[float]]:
+    """
+    Performts periction
+    """
+
+    ## alpha and beta
+        
+
     x_train.drop(columns=["destination"], inplace=True)
     x_test.drop(columns=["destination"], inplace=True)
 
@@ -235,10 +342,15 @@ def predict_next_cwnd(
     # 7) Train
     grid.fit(X_train, y_train)
 
+    ## getting snd_cwnd values
+    train_snd_cwnd = feat_train['snd_cwnd']
+    test_snd_cwnd = feat_test['snd_cwnd']
+    train_snd_cwnd_times = feat_train['ts']
+    test_snd_cwnd_times = feat_test['ts']
+    pred_snd_cwnd = []
 
     ## 8) get possible cwnd values -> possible congestion window changes by looking as past congestion window changes
     cwnd_choices = feat_train['snd_cwnd']
-
     def max_ojective(row):
 
         scores = []
@@ -250,8 +362,14 @@ def predict_next_cwnd(
     counter = 0
     for i, row in x_test.iterrows():
 
-        print(f"Row {counter} predicted cwnd is {max_ojective(row)}. Actual cwnd is {feat_test['snd_cwnd'].iloc[counter]}")
+        pred = max_ojective(row)
+        print(f"Row {counter} predicted cwnd is {pred}. Actual cwnd is {feat_test['snd_cwnd'].iloc[counter]}")
         counter += 1
+        pred_snd_cwnd.append(pred)
+
+    # 9) return train / test snd_cwnd and predicted snd_cwnd
+
+    return train_snd_cwnd, test_snd_cwnd, train_snd_cwnd_times, test_snd_cwnd_times, pred_snd_cwnd
 
 
 if __name__ == "__main__":
