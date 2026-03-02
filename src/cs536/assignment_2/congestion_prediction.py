@@ -276,7 +276,7 @@ def plot(
 
         ## increment and stop when counter reaches 5
         counter += 1
-        if counter >= 5:
+        if counter > 5:
             break
         plt.tight_layout()
         q3_stored_path = ASSIGNMENT_2_PATH / "results" / f"q3_{counter}.png"
