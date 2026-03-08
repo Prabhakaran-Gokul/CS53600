@@ -1,0 +1,45 @@
+# Installation Guide
+
+## Docker (Recommended - No System Changes)
+
+**Note:** Docker shares the host kernel, so kernel headers must be installed on the **host** system:
+```bash
+# On host machine (outside Docker)
+sudo apt-get install linux-headers-$(uname -r)
+```
+
+Then use Docker:
+```bash
+# Build and run
+docker-compose up -d
+docker-compose exec dev bash
+
+# Inside container
+cd src/cs536/assignment_3
+make && insmod tcp_custom.ko
+sysctl -w net.ipv4.tcp_allowed_congestion_control="reno cubic custom"
+
+# Run tests
+PYTHONPATH=/workspace/src python3 -m cs536.assignment_3.run_tests \
+    --server YOUR_SERVER --algorithms cubic reno custom --runs 5
+```
+
+## Native Installation
+
+```bash
+# Install dependencies
+sudo apt-get install build-essential linux-headers-$(uname -r)
+
+# Build and load
+cd src/cs536/assignment_3
+make
+sudo insmod tcp_custom.ko
+sudo sysctl -w net.ipv4.tcp_allowed_congestion_control="reno cubic custom"
+
+# Test
+PYTHONPATH=src python3 -m cs536.assignment_3.run_tests \
+    --server YOUR_SERVER --algorithms cubic reno custom --runs 5
+
+# Unload
+sudo rmmod tcp_custom
+```

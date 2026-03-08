@@ -11,3 +11,10 @@ wheels/
 
 # IDEs and editors
 .vscode/
+
+# Kernel and object files
+*.cmd
+*.o
+*.ko
+*.symvers
+*.order

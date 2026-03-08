@@ -11,6 +11,7 @@ dependencies = [
     "pandas>=2.0.3",
     "requests>=2.32.4",
     "ruff>=0.14.14",
+    "seaborn>=0.13.2",
     "tyro>=1.0.5",
 ]
 

@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  dev:
+    build: .
+    privileged: true
+    network_mode: host
+    volumes:
+      - .:/workspace
+      - /lib/modules:/lib/modules:ro
+      - /usr/src:/usr/src:ro
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
