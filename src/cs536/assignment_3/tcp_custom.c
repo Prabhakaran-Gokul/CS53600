@@ -141,10 +141,8 @@ static void update_cwnd(struct sock *sk, struct custom_cc *ca)
 		break;
 
 	case STATE_REDUCE:
-		/* Multiplicative decrease */
-		ca->cwnd = ca->cwnd / 2;
-		if (ca->cwnd < 2)
-			ca->cwnd = 2;
+		/* Reset to initial cwnd */
+		ca->cwnd = INIT_CWND;
 		/* Reset loss counter after reduction */
 		ca->loss_count = 0;
 		break;
@@ -172,9 +170,7 @@ static u32 custom_cc_ssthresh(struct sock *sk)
 
 	/* Force REDUCE state on loss */
 	ca->state = STATE_REDUCE;
-	ca->cwnd = ca->cwnd / 2;
-	if (ca->cwnd < 2)
-		ca->cwnd = 2;
+	ca->cwnd = INIT_CWND;
 
 	return ca->cwnd;
 }

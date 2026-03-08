@@ -2,14 +2,10 @@
 
 ## Docker (Recommended - No System Changes)
 
-**Note:** Docker shares the host kernel, so kernel headers must be installed on the **host** system:
 ```bash
-# On host machine (outside Docker)
-sudo apt-get install linux-headers-$(uname -r)
-```
+# From assignment_3 folder
+cd src/cs536/assignment_3
 
-Then use Docker:
-```bash
 # Build and run
 docker-compose up -d
 docker-compose exec dev bash

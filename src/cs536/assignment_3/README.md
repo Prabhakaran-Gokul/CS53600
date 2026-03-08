@@ -6,20 +6,9 @@ This assignment tests and compares the performance of different TCP congestion c
 
 The code in this directory:
 1. Extends the Assignment 2 TCP client to support congestion control algorithm selection
-2. Runs automated tests with CUBIC, RENO, and (later) custom congestion control algorithms
+2. Runs automated tests with CUBIC, RENO, and custom congestion control algorithms
 3. Collects throughput, RTT, and packet loss metrics
 4. Generates comparative visualizations and statistical analysis
-5. Uses **loguru** for professional logging and output formatting
-
-## Files
-
-- `tcp_client_cc.py` - TCP client with congestion control algorithm selection
-- `run_tests.py` - Script to run multiple test iterations with different algorithms
-- `analyze_results.py` - Analysis and visualization of test results
-- `check_cc_algorithms.py` - Utility to check available congestion control algorithms
-- `logger_config.py` - Loguru logging configuration
-- `requirements.txt` - Python dependencies including loguru
-- `results/` - Directory for storing test results and plots
 
 ## Installation
 
@@ -73,14 +62,6 @@ PYTHONPATH=src python -m cs536.assignment_3.run_tests --server SERVER_IP --runs 
 PYTHONPATH=src python -m cs536.assignment_3.run_tests \
     --server 185.93.1.65 \
     --algorithms cubic reno custom \
-    --runs 5
-```
-
-**Example with verbose output:**
-```bash
-PYTHONPATH=src python -m cs536.assignment_3.run_tests \
-    --server 185.93.1.65 \
-    --duration 20 \
     --runs 5 \
     --verbose
 ```
@@ -155,32 +136,6 @@ sudo modprobe tcp_reno
 sudo modprobe tcp_bbr  # for BBR testing
 ```
 
-### Python Dependencies
-
-The code uses dependencies from Assignment 2 plus loguru for logging:
-- pandas
-- numpy
-- matplotlib
-- tyro
-- **loguru** - Beautiful logging for clear, colorized output
-
-Install all dependencies:
-```bash
-pip install -r src/cs536/assignment_3/requirements.txt
-```
-
-## Logging with Loguru
-
-Assignment 3 uses [loguru](https://github.com/Delphire/loguru) for professional, colorized logging output. All test progress, results, and errors are logged with appropriate severity levels:
-
-- `logger.info()` - General information (green)
-- `logger.success()` - Successful operations (green, bold)
-- `logger.warning()` - Warnings (yellow)
-- `logger.error()` - Errors (red)
-- `logger.debug()` - Detailed debug info (when verbose mode is enabled)
-
-The logs are automatically timestamped and color-coded for easy reading in the terminal.
-
 ## Adding Custom Congestion Control Algorithm
 
 To test your custom congestion control algorithm:
@@ -194,21 +149,4 @@ To test your custom congestion control algorithm:
        --algorithms cubic reno YOUR_ALGORITHM \
        --runs 5
    ```
-
-## Notes
-
-- Tests require a running iperf3 server on the target host
-- Ensure sufficient permissions to set TCP socket options
-- Network conditions should be stable for meaningful comparisons
-- Multiple runs help account for network variability
-- 10-second duration per test is default (configurable)
-
-## Troubleshooting
-
-**"Failed to set congestion control"**: The algorithm may not be available in your kernel. Check available algorithms with `sysctl`.
-
-**Connection errors**: Verify the iperf3 server is running and reachable.
-
-**Permission denied**: Some systems require elevated privileges to set TCP options. Try running with sudo if necessary.
-
-**Inconsistent results**: Increase the number of runs (`--runs`) and ensure stable network conditions.
+   

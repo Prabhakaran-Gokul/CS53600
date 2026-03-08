@@ -143,9 +143,7 @@ static void update_cwnd(struct bpf_sock_ops *skops, struct cc_state *state)
 		break;
 
 	case STATE_REDUCE:
-		state->cwnd = state->cwnd / 2;
-		if (state->cwnd < 2)
-			state->cwnd = 2;
+		state->cwnd = INIT_CWND;
 		state->loss_count = 0;
 		break;
 	}

@@ -18,3 +18,4 @@ wheels/
 *.ko
 *.symvers
 *.order
+*.mod.*
