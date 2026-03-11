@@ -80,7 +80,7 @@ def check_available_algorithms():
     
     # Method 4: Test setting congestion control on a socket
     logger.info("\n4. Testing socket configuration:")
-    common_algos = ['cubic', 'reno', 'bbr', 'vegas', 'westwood']
+    common_algos = ['cubic', 'reno', 'custom', 'bbr', 'vegas', 'westwood']
     
     for algo in common_algos:
         try:

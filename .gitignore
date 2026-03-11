@@ -16,6 +16,11 @@ wheels/
 *.cmd
 *.o
 *.ko
+*.mod
 *.symvers
 *.order
 *.mod.*
+*.mod.c
+modules.order
+Module.symvers
+.tmp_versions/

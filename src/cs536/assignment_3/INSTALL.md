@@ -1,6 +1,10 @@
 # Installation Guide
 
-## Docker (Recommended - No System Changes)
+## Docker (Privileged/Host-Networked)
+
+This Docker workflow uses privileged and host-networked settings. It can modify
+host kernel/network state (module load/unload and `sysctl` changes), so it is
+not a no-system-change path.
 
 ```bash
 # From assignment_3 folder

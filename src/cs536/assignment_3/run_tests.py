@@ -10,6 +10,7 @@ Usage:
 
 import tyro
 import time
+import random
 import pandas as pd
 from pathlib import Path
 from typing import List, Optional
@@ -36,6 +37,8 @@ class TestConfig:
     """List of congestion control algorithms to test"""
     wait_between_runs: float = 2.0
     """Wait time between consecutive runs (seconds)"""
+    shuffle_seed: int = 536
+    """Deterministic random seed for per-round algorithm shuffling"""
     verbose: bool = False
     """Enable verbose output"""
 
@@ -116,11 +119,15 @@ def run_all_tests(config: TestConfig) -> dict:
     completed_tests = 0
     failed_tests = 0
     
-    for cc_algo in algorithms:
-        logger.info(f"\nTesting {cc_algo.upper()} ({config.runs} runs)")
+    rng = random.Random(config.shuffle_seed)
+
+    for run_id in range(config.runs):
+        round_algorithms = list(algorithms)
+        rng.shuffle(round_algorithms)
+        logger.info(f"\nRound {run_id + 1}/{config.runs} order: {', '.join([a.upper() for a in round_algorithms])}")
         logger.info("-" * 40)
-        
-        for run_id in range(config.runs):
+
+        for idx, cc_algo in enumerate(round_algorithms):
             goodput_df, stats, tcp_stats, success = run_single_test(
                 server=config.server,
                 port=config.port,
@@ -146,14 +153,12 @@ def run_all_tests(config: TestConfig) -> dict:
                 completed_tests += 1
             else:
                 failed_tests += 1
-            
-            # Wait between runs
-            if run_id < config.runs - 1:
+
+            if idx < len(round_algorithms) - 1:
                 time.sleep(config.wait_between_runs)
-        
-        # Longer wait between different algorithms
-        if cc_algo != algorithms[-1]:
-            logger.info("\nWaiting before next algorithm...")
+
+        if run_id < config.runs - 1:
+            logger.info("\nWaiting before next round...")
             time.sleep(config.wait_between_runs * 2)
     
     logger.info(f"\n{'='*60}")
@@ -217,6 +222,7 @@ def main(
     runs: int = 3,
     algorithms: Optional[List[str]] = None,
     wait_between_runs: float = 2.0,
+    shuffle_seed: int = 536,
     verbose: bool = False
 ):
     """
@@ -230,6 +236,7 @@ def main(
         runs: Number of test runs per algorithm (default: 3)
         algorithms: List of CC algorithms to test (default: ['cubic', 'reno'])
         wait_between_runs: Wait time between runs in seconds (default: 2.0)
+        shuffle_seed: Random seed for per-round algorithm shuffling (default: 536)
         verbose: Enable verbose output (default: False)
     """
     
@@ -241,6 +248,7 @@ def main(
         runs=runs,
         algorithms=algorithms,
         wait_between_runs=wait_between_runs,
+        shuffle_seed=shuffle_seed,
         verbose=verbose
     )
     

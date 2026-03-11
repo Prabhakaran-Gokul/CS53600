@@ -185,6 +185,11 @@ def run_with_congestion_control(
     stop_event.set()
     sender.join(timeout=5.0)
     tcp_thread.join(timeout=2.0)
+
+    if "error" in tcp_stats_holder:
+        err = tcp_stats_holder["error"]
+        err_name = type(err).__name__
+        raise RuntimeError(f"TCP stats sampling failed ({err_name}: {err})")
     
     if sender.error is not None:
         err_name = type(sender.error).__name__
@@ -231,7 +236,8 @@ def run_with_congestion_control(
         t_prev, b_prev = samples[i - 1].t, samples[i - 1].bytes_acked
         t_curr, b_curr = samples[i].t, samples[i].bytes_acked
         db = max(0, b_curr - b_prev)
-        bps = (db * 8.0) / interval
+        dt = max(t_curr - t_prev, 1e-9)
+        bps = (db * 8.0) / dt
         t_mid = 0.5 * (t_prev + t_curr)
         rows.append({"t_mid": t_mid, "goodput_bps": bps})
 

@@ -3,7 +3,7 @@
 obj-m += tcp_custom.o
 
 KDIR := /lib/modules/$(shell uname -r)/build
-PWD := $(CURDIR)
+PWD := $(shell pwd -L)
 
 all:
 	$(MAKE) -C "$(KDIR)" M="$(PWD)" modules
