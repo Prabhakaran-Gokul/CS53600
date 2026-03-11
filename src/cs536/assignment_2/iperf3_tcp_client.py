@@ -56,8 +56,8 @@ def recv_state_or_json(sock: socket.socket):
 
     first = hdr[0]
     if first in KNOWN_STATES:
-        return 0 # 0 is ok, a state
-    return -1 # -1 is directly json
+        return "state"
+    return "json"
 
 
 def set_common_sockopts(sock: socket.socket, *, nodelay=True, keepalive=True, timeout_sec=10.0):
@@ -327,7 +327,7 @@ def run_iperf3_tcp_client(server: str, port: int, duration: int, connect_timeout
 
         kind = recv_state_or_json(ctrl)
 
-        if kind == 0:
+        if kind == "state":
             st = await_state([DISPLAY_RESULTS, IPERF_DONE], "await DISPLAY_RESULTS/IPERF_DONE")
             # Next state: DISPLAY_RESULTS (typically), then we can send IPERF_DONE.
             if st == DISPLAY_RESULTS:

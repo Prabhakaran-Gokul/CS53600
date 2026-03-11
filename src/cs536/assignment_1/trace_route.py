@@ -42,58 +42,68 @@ def traceroute(ip):
     return hops
 
 
-################################
-# should be do more work for give a .csv file (contain ips) and return a list contain random 5 ip addresses
-################################
-ips = ["160.242.19.254", "spd-uswb.hostkey.com"]
+def main():
+    ################################
+    # should be do more work for give a .csv file (contain ips) and return a list contain random 5 ip addresses
+    ################################
+    ips = ["160.242.19.254", "spd-uswb.hostkey.com"]
 
-hop_rtts_list = []
-hop_rtt_increase = []
+    hop_rtts_list = []
+    hop_rtt_increase = []
 
-# get hop list for every ip address.
-for ip in ips:
-    hops = traceroute(ip)
-    hop_rtts_list.append(hops)
-    rtt_increase = [hops[0]]
-    for i in range(len(hops)):
-        if i > 0:
-            rtt_increase.append(hops[i] - hops[i - 1])
-    hop_rtt_increase.append(rtt_increase)
+    # get hop list for every ip address.
+    for ip in ips:
+        hops = traceroute(ip)
+        if not hops:
+            continue
+        hop_rtts_list.append(hops)
+        rtt_increase = [hops[0]]
+        for i in range(len(hops)):
+            if i > 0:
+                rtt_increase.append(hops[i] - hops[i - 1])
+        hop_rtt_increase.append(rtt_increase)
 
-print(hop_rtts_list)
-print(hop_rtt_increase)
+    if not hop_rtt_increase:
+        print("No traceroute samples were collected.")
+        return
+
+    print(hop_rtts_list)
+    print(hop_rtt_increase)
+
+    #############################
+    #   GET Stacked bar chart
+    #############################
+    plt.figure()
+    bottom = [0] * len(hop_rtt_increase)
+    for hop_idx in range(max(len(h) for h in hop_rtt_increase)):
+        hop_values = []
+        for h in hop_rtt_increase:
+            hop_values.append(h[hop_idx] if hop_idx < len(h) else 0)
+
+        plt.bar(ips[:len(hop_rtt_increase)], hop_values, bottom=bottom)
+        bottom = [bottom[i] + hop_values[i] for i in range(len(hop_rtt_increase))]
+
+    plt.ylabel("RTT (ms)")
+    plt.title("Latency Breakdown per Hop")
+    plt.savefig("latency_breakdown.pdf")
+
+    #####################################
+    #   GET hop count vs RTT graph
+    #####################################
+    plt.figure()
+    hop_counts = []
+    total_rtts = []
+
+    for hop_list in hop_rtts_list:
+        hop_counts.append(len(hop_list))
+        total_rtts.append(hop_list[-1])
+
+    plt.scatter(hop_counts, total_rtts)
+    plt.xlabel("Hop Count")
+    plt.ylabel("Total RTT (ms)")
+    plt.title("Hop Count vs RTT")
+    plt.savefig("hop_vs_rtt.pdf")
 
 
-#############################
-#   GET Stacked bar chart
-#############################
-plt.figure()
-bottom = [0] * len(ips)
-for hop_idx in range(max(len(h) for h in hop_rtt_increase)):
-    hop_values = []
-    for h in hop_rtt_increase:
-        hop_values.append(h[hop_idx] if hop_idx < len(h) else 0)
-
-    plt.bar(ips, hop_values, bottom=bottom)
-    bottom = [bottom[i] + hop_values[i] for i in range(len(ips))]
-
-plt.ylabel("RTT (ms)")
-plt.title("Latency Breakdown per Hop")
-plt.savefig("latency_breakdown.pdf")
-
-#####################################
-#   GET hop count vs RTT graph
-#####################################
-plt.figure()
-hop_counts = []
-total_rtts = []
-
-for hop_list in hop_rtts_list:
-    hop_counts.append(len(hop_list))
-    total_rtts.append(hop_list[-1])
-
-plt.scatter(hop_counts, total_rtts)
-plt.xlabel("Hop Count")
-plt.ylabel("Total RTT (ms)")
-plt.title("Hop Count vs RTT")
-plt.savefig("hop_vs_rtt.pdf")
+if __name__ == "__main__":
+    main()

@@ -126,11 +126,10 @@ def run_with_congestion_control(
     
     # Set congestion control BEFORE connect
     cc_set = set_congestion_control(ds, cc_algorithm)
+    if not cc_set:
+        raise RuntimeError(f"Failed to set congestion control to '{cc_algorithm}'")
     if verbose:
-        if cc_set:
-            logger.info(f"[data] congestion control set to: {cc_algorithm}")
-        else:
-            logger.warning(f"[data] WARNING: failed to set congestion control to {cc_algorithm}")
+        logger.info(f"[data] congestion control set to: {cc_algorithm}")
     
     ds.settimeout(8.0)
     ds.connect(resolve_target(host, port))
@@ -140,8 +139,10 @@ def run_with_congestion_control(
     actual_cc = get_congestion_control(ds)
     if verbose:
         logger.debug(f"[data] actual congestion control: {actual_cc}")
-    if actual_cc and actual_cc.lower() != cc_algorithm.lower():
-        logger.warning(f"WARNING: Requested {cc_algorithm} but got {actual_cc}")
+    if actual_cc is None:
+        raise RuntimeError("Unable to verify active congestion control algorithm")
+    if actual_cc.lower() != cc_algorithm.lower():
+        raise RuntimeError(f"Requested congestion control '{cc_algorithm}' but socket is using '{actual_cc}'")
 
     stop_event = threading.Event()
     sender = DataSender(ds, cookie=cookie, payload=payload, stop_event=stop_event)

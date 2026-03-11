@@ -17,6 +17,11 @@ from loguru import logger
 from cs536.assignment_3 import ASSIGNMENT_3_PATH
 
 
+def _time_bin(series: pd.Series, decimals: int = 2) -> pd.Series:
+    """Bin floating timestamps to reduce cross-run alignment noise."""
+    return series.astype(float).round(decimals)
+
+
 def load_results(results_dir: Path) -> dict:
     """Load all result files from the results directory."""
     
@@ -78,7 +83,11 @@ def plot_throughput_comparison(goodput_df: pd.DataFrame, output_dir: Path):
                    alpha=0.3, linewidth=1)
         
         # Plot average across runs
-        avg_by_time = algo_data.groupby('t_mid')['throughput_mbps'].mean()
+        avg_by_time = (
+            algo_data.assign(t_bin=_time_bin(algo_data['t_mid']))
+            .groupby('t_bin')['throughput_mbps']
+            .mean()
+        )
         ax.plot(avg_by_time.index, avg_by_time.values, 
                label=algo.upper(), linewidth=2)
     
@@ -145,7 +154,11 @@ def plot_rtt_comparison(tcp_stats_df: pd.DataFrame, output_dir: Path):
         algo_data = tcp_stats_df[tcp_stats_df['cc_algorithm'] == algo]
         
         # Plot average RTT across runs
-        avg_by_time = algo_data.groupby('ts')['rtt_ms'].mean()
+        avg_by_time = (
+            algo_data.assign(t_bin=_time_bin(algo_data['ts']))
+            .groupby('t_bin')['rtt_ms']
+            .mean()
+        )
         ax.plot(avg_by_time.index, avg_by_time.values, 
                label=algo.upper(), linewidth=2, alpha=0.8)
     
@@ -202,7 +215,11 @@ def plot_loss_comparison(tcp_stats_df: pd.DataFrame, output_dir: Path):
         algo_data = tcp_stats_df[tcp_stats_df['cc_algorithm'] == algo]
         
         if 'total_retrans' in algo_data.columns:
-            avg_by_time = algo_data.groupby('ts')['total_retrans'].mean()
+            avg_by_time = (
+                algo_data.assign(t_bin=_time_bin(algo_data['ts']))
+                .groupby('t_bin')['total_retrans']
+                .mean()
+            )
             ax.plot(avg_by_time.index, avg_by_time.values, 
                    label=algo.upper(), linewidth=2, alpha=0.8)
     
@@ -223,7 +240,7 @@ def plot_loss_comparison(tcp_stats_df: pd.DataFrame, output_dir: Path):
         # Get final values per run
         final_losses = []
         for run_id in algo_data['run_id'].unique():
-            run_data = algo_data[algo_data['run_id'] == run_id]
+            run_data = algo_data[algo_data['run_id'] == run_id].sort_values('ts')
             if 'total_retrans' in run_data.columns and len(run_data) > 0:
                 final_loss = run_data['total_retrans'].iloc[-1]
                 final_losses.append(final_loss)
@@ -278,7 +295,11 @@ def plot_cwnd_comparison(tcp_stats_df: pd.DataFrame, output_dir: Path):
         algo_data = tcp_stats_df[tcp_stats_df['cc_algorithm'] == algo]
         
         # Plot average cwnd across runs
-        avg_by_time = algo_data.groupby('ts')['snd_cwnd'].mean()
+        avg_by_time = (
+            algo_data.assign(t_bin=_time_bin(algo_data['ts']))
+            .groupby('t_bin')['snd_cwnd']
+            .mean()
+        )
         ax.plot(avg_by_time.index, avg_by_time.values, 
                label=algo.upper(), linewidth=2, alpha=0.8)
     
