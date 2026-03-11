@@ -56,6 +56,9 @@ MODULE_WAS_PRESENT=0
 MODULE_LOADED_BY_SCRIPT=0
 BUILD_DIR="${ASSIGN3_DIR}"
 BUILD_LINK=""
+ORIG_ALLOWED_CC=""
+ALLOWED_CC_CHANGED=0
+CLEANUP_DONE=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -127,11 +130,27 @@ if ! command -v sudo >/dev/null 2>&1; then
   exit 1
 fi
 
+ORIG_ALLOWED_CC="$(sysctl -n net.ipv4.tcp_allowed_congestion_control 2>/dev/null || true)"
+if [[ -n "${ORIG_ALLOWED_CC}" ]]; then
+  echo "[info] Original allowed CC algorithms: ${ORIG_ALLOWED_CC}"
+else
+  echo "[warn] Could not read current net.ipv4.tcp_allowed_congestion_control; restore may be skipped."
+fi
+
 if lsmod | awk '{print $1}' | grep -qx "tcp_custom"; then
   MODULE_WAS_PRESENT=1
 fi
 
 cleanup() {
+  if [[ "${CLEANUP_DONE}" -eq 1 ]]; then
+    return
+  fi
+  CLEANUP_DONE=1
+
+  if [[ "${ALLOWED_CC_CHANGED}" -eq 1 && -n "${ORIG_ALLOWED_CC}" ]]; then
+    echo "[cleanup] Restoring allowed CC algorithms: ${ORIG_ALLOWED_CC}"
+    sudo sysctl -w net.ipv4.tcp_allowed_congestion_control="${ORIG_ALLOWED_CC}" >/dev/null || true
+  fi
   if [[ "${KEEP_MODULE}" -eq 0 && "${MODULE_LOADED_BY_SCRIPT}" -eq 1 ]]; then
     echo "[cleanup] Unloading tcp_custom kernel module..."
     sudo rmmod tcp_custom || true
@@ -140,7 +159,7 @@ cleanup() {
     rm -f "${BUILD_LINK}" || true
   fi
 }
-trap cleanup EXIT
+trap cleanup EXIT INT TERM
 
 echo "[info] Repo root: ${REPO_ROOT}"
 echo "[info] Assignment 3 dir: ${ASSIGN3_DIR}"
@@ -183,16 +202,20 @@ pushd "${BUILD_DIR}" >/dev/null
 make
 popd >/dev/null
 
+if [[ "${MODULE_WAS_PRESENT}" -eq 1 ]]; then
+  echo "[step] tcp_custom already loaded. Unloading stale module before reload..."
+  sudo rmmod tcp_custom
+fi
+
+echo "[step] Loading freshly built tcp_custom kernel module..."
+sudo insmod "${BUILD_DIR}/tcp_custom.ko"
 if [[ "${MODULE_WAS_PRESENT}" -eq 0 ]]; then
-  echo "[step] Loading tcp_custom kernel module..."
-  sudo insmod "${BUILD_DIR}/tcp_custom.ko"
   MODULE_LOADED_BY_SCRIPT=1
-else
-  echo "[step] tcp_custom already loaded. Reusing existing module."
 fi
 
 echo "[step] Allowing congestion control algorithms: reno cubic custom"
 sudo sysctl -w net.ipv4.tcp_allowed_congestion_control="reno cubic custom" >/dev/null
+ALLOWED_CC_CHANGED=1
 AVAILABLE_ALGOS="$(sysctl -n net.ipv4.tcp_available_congestion_control || true)"
 echo "[info] Available CC algorithms: ${AVAILABLE_ALGOS}"
 

@@ -26,10 +26,10 @@ pip install loguru pandas numpy matplotlib tyro
 
 ### Implementation
 
-The custom algorithm is implemented as a **Linux kernel module** in [tcp_custom.c](tcp_custom.c).
+The graded custom algorithm is implemented as a **Linux kernel module** in [tcp_custom.c](tcp_custom.c).
 
 > Note: `tcp_custom_bpf.c` is an experimental sockops monitor and does not enforce cwnd directly.
-> Use the kernel-module path above for graded congestion-control behavior.
+> For grading, use the kernel-module path above. The eBPF file is non-graded/experimental.
 
 **Build and install:**
 ```bash
@@ -55,6 +55,15 @@ Optional:
 - `--interval 0.5`
 - `--keep-module` (do not unload `tcp_custom` on script exit)
 - `--skip-venv` (use your existing Python environment)
+
+### Quick Start Script
+
+You can run quickstart either directly or as a module:
+
+```bash
+python src/cs536/assignment_3/quickstart.py --help
+python -m cs536.assignment_3.quickstart --help
+```
 
 ### Step 1: Run Tests
 
@@ -157,7 +166,7 @@ sudo modprobe tcp_bbr  # for BBR testing
 
 To test your custom congestion control algorithm:
 
-1. Load your kernel module or eBPF program
+1. Load your kernel module (graded path). The eBPF file is experimental only.
 2. Verify it's available: `sysctl net.ipv4.tcp_available_congestion_control`
 3. Run tests including your algorithm:
    ```bash

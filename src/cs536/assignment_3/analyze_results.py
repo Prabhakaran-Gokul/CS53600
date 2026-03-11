@@ -108,7 +108,7 @@ def plot_throughput_comparison(goodput_df: pd.DataFrame, output_dir: Path):
         box_data.append(algo_data)
         labels.append(algo.upper())
     
-    bp = ax.boxplot(box_data, labels=labels, patch_artist=True,
+    bp = ax.boxplot(box_data, tick_labels=labels, patch_artist=True,
                     showmeans=True, meanline=True)
     
     # Color the boxes
@@ -178,7 +178,7 @@ def plot_rtt_comparison(tcp_stats_df: pd.DataFrame, output_dir: Path):
         box_data.append(algo_data)
         labels.append(algo.upper())
     
-    bp = ax.boxplot(box_data, labels=labels, patch_artist=True,
+    bp = ax.boxplot(box_data, tick_labels=labels, patch_artist=True,
                     showmeans=True, meanline=True)
     
     colors = plt.cm.Set3(np.linspace(0, 1, len(box_data)))
@@ -197,7 +197,7 @@ def plot_rtt_comparison(tcp_stats_df: pd.DataFrame, output_dir: Path):
 
 
 def plot_loss_comparison(tcp_stats_df: pd.DataFrame, output_dir: Path):
-    """Plot packet loss comparison across algorithms."""
+    """Plot retransmission-based loss proxy comparison across algorithms."""
     
     if tcp_stats_df.empty:
         logger.warning("⚠ No TCP stats data to plot loss")
@@ -230,7 +230,7 @@ def plot_loss_comparison(tcp_stats_df: pd.DataFrame, output_dir: Path):
     ax.legend(fontsize=11)
     ax.grid(True, alpha=0.3)
     
-    # Plot 2: Loss comparison bar chart
+    # Plot 2: Retransmission comparison bar chart
     ax = axes[1]
     
     loss_summary = []
@@ -262,7 +262,7 @@ def plot_loss_comparison(tcp_stats_df: pd.DataFrame, output_dir: Path):
         ax.set_xticks(x)
         ax.set_xticklabels(loss_df['algorithm'])
         ax.set_ylabel('Average Total Retransmissions', fontsize=12)
-        ax.set_title('Average Packet Loss by Congestion Control Algorithm', 
+        ax.set_title('Average Retransmissions by Congestion Control Algorithm', 
                     fontsize=14, fontweight='bold')
         ax.grid(True, alpha=0.3, axis='y')
         
