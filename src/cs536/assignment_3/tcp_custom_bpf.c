@@ -2,6 +2,10 @@
  * Custom TCP Congestion Control - eBPF Implementation
  * 
  * Requires Linux kernel 5.6+ with CONFIG_BPF_SYSCALL=y
+ *
+ * Note: this sock_ops example tracks congestion signals in BPF state, but it
+ * does not directly program TCP cwnd. For active cwnd control in eBPF, use
+ * the TCP struct_ops interface (BPF_PROG_TYPE_STRUCT_OPS).
  * Compile with: clang -O2 -target bpf -c tcp_custom_bpf.c -o tcp_custom_bpf.o
  */
 
@@ -131,6 +135,8 @@ static __u8 determine_state(struct bpf_sock_ops *skops, struct cc_state *state)
 /* Update cwnd based on state */
 static void update_cwnd(struct bpf_sock_ops *skops, struct cc_state *state)
 {
+	(void)skops;
+
 	switch (state->state) {
 	case STATE_FAST:
 		state->cwnd = state->cwnd * 2;
@@ -147,9 +153,6 @@ static void update_cwnd(struct bpf_sock_ops *skops, struct cc_state *state)
 		state->loss_count = 0;
 		break;
 	}
-
-	/* Set cwnd via BPF helper */
-	bpf_setsockopt(skops, SOL_TCP, TCP_CONGESTION, &state->cwnd, sizeof(state->cwnd));
 }
 
 /* Main BPF program */

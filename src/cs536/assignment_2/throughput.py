@@ -12,24 +12,28 @@ Place this script in the same folder as your `iperf3_tcp_client.py`.
 """
 
 
-from dataclasses import dataclass
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple
 import tyro 
 import random
 import requests
 from pathlib import Path
 from cs536.assignment_2 import ASSIGNMENT_2_PATH
 from matplotlib import pyplot as plt
-import numpy as np
 import pandas as pd
 from cs536.assignment_2.iperf3_tcp_client import run_one_destination_with_sampling
 import os
+
+RESULTS_DIR = ASSIGNMENT_2_PATH / "results"
+
+
+def _ensure_results_dir():
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def fetch_ip_list(
     url: str = "https://iperf3serverlist.net/api/servers",
     timeout: float = 10.0,
-    file: Path = ASSIGNMENT_2_PATH / "results" / "ip_addresses.txt",
+    file: Path = RESULTS_DIR / "ip_addresses.txt",
 ) -> list[str]:
     """Fetch and extract IP addresses from the iperf3 server API and saves it to a file.
 
@@ -58,6 +62,7 @@ def fetch_ip_list(
             ips.add(ip)
 
     # Save to file
+    file.parent.mkdir(parents=True, exist_ok=True)
     with open(file, "w", encoding="utf-8") as f:
         for ip in sorted(ips):
             f.write(f"{ip}\n")
@@ -66,7 +71,7 @@ def fetch_ip_list(
 
 
 def fetch_ip_from_file(
-    file: Path = ASSIGNMENT_2_PATH / "results" / "ip_addresses.txt",
+    file: Path = RESULTS_DIR / "ip_addresses.txt",
 ) -> list[str]:
     ips = []
     with open(file, "r", encoding="utf-8") as f:
@@ -78,34 +83,39 @@ def fetch_ip_from_file(
 
 
 def format_bps(bps: float) -> str:
-    #bps /= 1000
-    units = ["b/s", "Kb/s", "Mb/s", "Gb/s", "Tb/s"]
-    val = float(bps)
-    i = 0
-    '''
-    while val >= 1000 and i < len(units) - 1:
-        val /= 1000.0
-        i += 1
-    return f"{val:.2f} {units[i]}"
-    '''
-
-    return f"{val} bits / s"
+    return f"{float(bps):.2f} bits / s"
 
 def store_q2_result(ip_used : List[str], tcp_stats : List[pd.DataFrame], frames: List[pd.DataFrame]):
     """
         Stores the required part of q2 in a csv 
     """
-    
+    _ensure_results_dir()
 
+    merged_runs: List[pd.DataFrame] = []
     for ip, tcp_stat, frame in zip(ip_used, tcp_stats, frames):
-        tcp_stat["ip"] = ip
-        #frame["ip"] = ip
+        if tcp_stat.empty or frame.empty:
+            continue
 
-    tcp_all = pd.concat(tcp_stats, ignore_index=True) if tcp_stats else pd.DataFrame()
-    frames_all = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+        tcp_df = tcp_stat.sort_values("ts").copy()
+        tcp_df["ip"] = ip
 
-    combined = pd.concat([tcp_all, frames_all], axis = 1, sort=False)
-    out_csv = ASSIGNMENT_2_PATH / "results" / "q2_combined.csv"
+        goodput_cols = ["t_mid", "goodput_bps"]
+        if "destination" in frame.columns and "destination" not in tcp_df.columns:
+            goodput_cols.append("destination")
+        goodput_df = frame[goodput_cols].sort_values("t_mid").copy()
+
+        # Align each TCP sample with the nearest goodput sample by timestamp.
+        merged = pd.merge_asof(
+            tcp_df,
+            goodput_df,
+            left_on="ts",
+            right_on="t_mid",
+            direction="nearest",
+        )
+        merged_runs.append(merged)
+
+    combined = pd.concat(merged_runs, ignore_index=True) if merged_runs else pd.DataFrame()
+    out_csv = RESULTS_DIR / "q2_combined.csv"
     combined.to_csv(out_csv, index=False)
 
 
@@ -127,7 +137,8 @@ def plot_1c(frames : List[pd.DataFrame], used_ips : List[str], summary_rows : Li
     ax.legend(title="Destination", loc="best")
     plt.tight_layout()
 
-    plot_stored_path = ASSIGNMENT_2_PATH / "results" / "1c_plot.png"
+    _ensure_results_dir()
+    plot_stored_path = RESULTS_DIR / "1c_plot.png"
     plt.savefig(plot_stored_path)
     #plt.show()
 
@@ -154,7 +165,7 @@ def plot_1c(frames : List[pd.DataFrame], used_ips : List[str], summary_rows : Li
     table.scale(1.2, 1.2)  # (x, y) scaling of cell padding
 
     plt.tight_layout()
-    table_stored_path = ASSIGNMENT_2_PATH / "results" / "1c_table.png"
+    table_stored_path = RESULTS_DIR / "1c_table.png"
     plt.savefig(table_stored_path)
 
 
@@ -205,7 +216,8 @@ def plot_2b(ip_used : List[str], tcp_stats : List[pd.DataFrame], frames: List[pd
     axes[3].legend(title="Destination", loc="best")
 
     plt.tight_layout()
-    time_series_stored_path = ASSIGNMENT_2_PATH / "results" / "2b_i.png"
+    _ensure_results_dir()
+    time_series_stored_path = RESULTS_DIR / "2b_i.png"
     plt.savefig(time_series_stored_path)
 
     
@@ -238,7 +250,7 @@ def plot_2b(ip_used : List[str], tcp_stats : List[pd.DataFrame], frames: List[pd
     axes[2].grid(True, alpha=0.3)
 
     plt.tight_layout()
-    scatter_stored_path = ASSIGNMENT_2_PATH / "results" / "2b_ii.png"
+    scatter_stored_path = RESULTS_DIR / "2b_ii.png"
     plt.savefig(scatter_stored_path)
 
 
@@ -262,6 +274,7 @@ def run(file : str = "", n : int = 2, duration: int = 10, interval: float = 1.0,
     tcp_summary: List[pd.DataFrame] = []
     success_counter: int = 0
     used_ips: List[str] = []
+    _ensure_results_dir()
     if not os.path.exists(file):
         ip_list: List[str] = fetch_ip_list()
     else:
@@ -270,7 +283,7 @@ def run(file : str = "", n : int = 2, duration: int = 10, interval: float = 1.0,
     #    "185.93.1.65", "109.61.86.65", "185.152.67.2", "195.181.162.195", "185.59.223.8", "66.35.22.79", "209.40.123.215",
     #           "109.61.86.65", "37.19.216.1", "66.35.30.9", "173.243.131.29", "185.59.221.51", "96.45.40.45"] # for testing
 
-    while success_counter < n:
+    while success_counter < n and ip_list:
 
         target_ip = random.choice(ip_list)
         try:
@@ -292,11 +305,17 @@ def run(file : str = "", n : int = 2, duration: int = 10, interval: float = 1.0,
             continue
         success_counter += 1
 
+    if success_counter < n:
+        print(f"[warn] Completed {success_counter}/{n} runs before IP list was exhausted.")
+
+    if not frames:
+        raise RuntimeError("No successful throughput runs were collected.")
+
     store_q2_result(ip_used= used_ips, tcp_stats= tcp_summary, frames = frames)
     if q1:
         plot_1c(frames=frames, used_ips=used_ips, summary_rows=summary_rows)
 
-    if q2:
+    if q2 and tcp_summary:
         plot_2b(ip_used=used_ips, tcp_stats=tcp_summary, frames=frames)
 
 
@@ -307,4 +326,3 @@ def run(file : str = "", n : int = 2, duration: int = 10, interval: float = 1.0,
 
 if __name__ == "__main__":
     tyro.cli(run)
-

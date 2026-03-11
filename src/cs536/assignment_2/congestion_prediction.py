@@ -1,21 +1,16 @@
 # congestion_prediction.py
 from pathlib import Path
+from typing import List, Tuple
+
+import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_absolute_error, r2_score, make_scorer
-from typing import Tuple
-# Add this to congestion_prediction.py
-from pathlib import Path
-import numpy as np
-import pandas as pd
 from sklearn.impute import SimpleImputer
+from sklearn.model_selection import GridSearchCV, TimeSeriesSplit
+from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import GridSearchCV, TimeSeriesSplit, train_test_split
-import matplotlib.pyplot as plt
 
-from typing import List, Tuple
 from cs536.assignment_2 import ASSIGNMENT_2_PATH
 
 def prep_data(
@@ -41,7 +36,7 @@ def prep_data(
     df : pd.DataFrame = pd.read_csv(csv_path)
 
     ## drop extra rows
-    df.drop(columns=["ip", "t_mid"], inplace=True)
+    df.drop(columns=["ip", "t_mid"], inplace=True, errors="ignore")
     #df.drop(columns=[])
 
     ## combine total_retrans, lost_pkts, retrans_pkgs into one metric
@@ -62,8 +57,8 @@ def prep_data(
         group = group.sort_values('ts').copy() ## group now has the sorted time for an IP
 
         ## create lags
-        for l in lags:
-            group[f'lag_{l}'] = group['snd_cwnd'].shift(l)
+        for lag in lags:
+            group[f'lag_{lag}'] = group['snd_cwnd'].shift(lag)
 
         ## create windows
         for window in rolling_window:
@@ -89,9 +84,9 @@ def prep_data(
     #feat_df = feat_df.dropna(subset=['y_target'] + [c for c in feat_df.columns if c.startswith('lag') or c.startswith('roll')])
     feat_df = feat_df.dropna(subset=['y_target'] + [c for c in feat_df.columns if c.startswith('lag') or c.startswith('roll') or c == 'objective'])
 
-    ## get features     
-    x = feat_df.drop(columns=["snd_cwnd", "y_target", "objective"])
-    # x = feat_df.drop(columns=["snd_cwnd", "y_target"])
+    ## get features
+    # Keep snd_cwnd in features; the optimization loop evaluates candidate cwnd values.
+    x = feat_df.drop(columns=["y_target", "objective"])
 
     ## get labels
     y = feat_df['y_target']
@@ -121,23 +116,15 @@ def get_split(
     """
     
     ## take the last n values of each destination as train test split
-    def get_last_n(x : pd.DataFrame, y : pd.DataFrame, feat : pd.DataFrame, n : int = 1) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    def get_last_n(x : pd.DataFrame, y : pd.DataFrame, feat : pd.DataFrame, n : int = 1) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         x_train = x.head(len(x) - n)
         x_test = x.tail(n)
         y_train = y.head(len(y) - n)
         y_test = y.tail(n)
         feat_train = feat.head(len(feat) - n)
-        feat_test = feat.head(n)
+        feat_test = feat.tail(n)
 
         return x_train, x_test, y_train, y_test, feat_train, feat_test
-
-    x_train_list = []
-    x_test_list = []
-    y_train_list = []
-    y_test_list = []
-    feat_train_list = []
-    feat_test_list = []
-
 
     x_train_dict = {}
     x_test_dict = {}
@@ -146,11 +133,18 @@ def get_split(
     feat_train_dict = {}
     feat_test_dict = {}
 
-    for ip,x_group in x.groupby("destination"):
+    for ip, x_group in x.groupby("destination"):
+        if len(x_group) <= 10:
+            continue
         #x_train, x_test, y_train, y_test = get_last_n(x[])
         y_group = y.loc[x_group.index]  # align labels to this destination group
         feat_group = feat.loc[x_group.index]
-        x_train, x_test, y_train, y_test, feat_train, feat_test= get_last_n(x_group, y_group, feat_group, n=10)
+        x_train, x_test, y_train, y_test, feat_train, feat_test = get_last_n(
+            x_group,
+            y_group,
+            feat_group,
+            n=10,
+        )
         '''
         x_train_list.append(x_train)
         x_test_list.append(x_test)
@@ -279,7 +273,9 @@ def plot(
         if counter > 5:
             break
         plt.tight_layout()
-        q3_stored_path = ASSIGNMENT_2_PATH / "results" / f"q3_{counter}.png"
+        q3_results_path = ASSIGNMENT_2_PATH / "results"
+        q3_results_path.mkdir(parents=True, exist_ok=True)
+        q3_stored_path = q3_results_path / f"q3_{counter}.png"
         plt.savefig(q3_stored_path)
     #plt.show()
 
@@ -297,8 +293,8 @@ def predict_next_cwnd_for_trace(
     ## alpha and beta
         
 
-    x_train.drop(columns=["destination"], inplace=True)
-    x_test.drop(columns=["destination"], inplace=True)
+    x_train = x_train.drop(columns=["destination"], errors="ignore").copy()
+    x_test = x_test.drop(columns=["destination"], errors="ignore").copy()
 
     # 3) Feature set (only columns that actually exist)
     feature_cols = x_train.columns
@@ -347,19 +343,23 @@ def predict_next_cwnd_for_trace(
     pred_snd_cwnd = []
 
     ## 8) get possible cwnd values -> possible congestion window changes by looking as past congestion window changes
-    cwnd_choices = feat_train['snd_cwnd']
-    def max_ojective(row):
+    cwnd_choices = feat_train['snd_cwnd'].dropna().unique()
+    if len(cwnd_choices) == 0:
+        cwnd_choices = x_train['snd_cwnd'].dropna().unique()
+    if len(cwnd_choices) == 0:
+        return train_snd_cwnd, test_snd_cwnd, train_snd_cwnd_times, test_snd_cwnd_times, pred_snd_cwnd
+    def max_objective(row):
 
         scores = []
         for cwnd in cwnd_choices:
-            input = pd.DataFrame([{**row, 'snd_cwnd':cwnd}])
-            scores.append((cwnd, grid.predict(input)[0]))
+            candidate_input = pd.DataFrame([{**row, 'snd_cwnd':cwnd}])
+            scores.append((cwnd, grid.predict(candidate_input)[0]))
         return max(scores, key= lambda x: x[1])[0]
 
     counter = 0
     for i, row in x_test.iterrows():
 
-        pred = max_ojective(row)
+        pred = max_objective(row)
         print(f"Row {counter} predicted cwnd is {pred}. Actual cwnd is {feat_test['snd_cwnd'].iloc[counter]}")
         counter += 1
         pred_snd_cwnd.append(pred)

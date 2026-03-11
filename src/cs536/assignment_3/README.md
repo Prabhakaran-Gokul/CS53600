@@ -15,12 +15,11 @@ The code in this directory:
 Install the required dependencies:
 
 ```bash
-# Install from pyproject.toml file
-pip install -e .
+# Install from requirements file
+pip install -r src/cs536/assignment_3/requirements.txt
 
-# Or use uv
-uv sync
-uv pip install -e .
+# Or install individually
+pip install loguru pandas numpy matplotlib tyro
 ```
 
 ## Custom Congestion Control Algorithm
@@ -28,6 +27,9 @@ uv pip install -e .
 ### Implementation
 
 The custom algorithm is implemented as a **Linux kernel module** in [tcp_custom.c](tcp_custom.c).
+
+> Note: `tcp_custom_bpf.c` is an experimental sockops monitor and does not enforce cwnd directly.
+> Use the kernel-module path above for graded congestion-control behavior.
 
 **Build and install:**
 ```bash
@@ -39,6 +41,20 @@ make install
 See [INSTALL.md](INSTALL.md) for detailed instructions.
 
 ## Usage
+
+### One Command (Recommended)
+
+Run everything end-to-end (setup, module build/load, tests, analysis):
+
+```bash
+bash src/cs536/assignment_3/run_all_assignment3.sh --server SERVER_IP --runs 5 --duration 10
+```
+
+Optional:
+- `--algorithms "cubic reno custom"`
+- `--interval 0.5`
+- `--keep-module` (do not unload `tcp_custom` on script exit)
+- `--skip-venv` (use your existing Python environment)
 
 ### Step 1: Run Tests
 
@@ -134,13 +150,14 @@ sysctl net.ipv4.tcp_allowed_congestion_control
 # Load specific modules (if needed)
 sudo modprobe tcp_cubic
 sudo modprobe tcp_reno
+sudo modprobe tcp_bbr  # for BBR testing
 ```
 
 ## Adding Custom Congestion Control Algorithm
 
 To test your custom congestion control algorithm:
 
-1. Load your kernel module
+1. Load your kernel module or eBPF program
 2. Verify it's available: `sysctl net.ipv4.tcp_available_congestion_control`
 3. Run tests including your algorithm:
    ```bash
