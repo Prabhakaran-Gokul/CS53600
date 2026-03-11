@@ -15,11 +15,12 @@ The code in this directory:
 Install the required dependencies:
 
 ```bash
-# Install from requirements file
-pip install -r src/cs536/assignment_3/requirements.txt
+# Install from pyproject.toml file
+pip install -e .
 
-# Or install individually
-pip install loguru pandas numpy matplotlib tyro
+# Or use uv
+uv sync
+uv pip install -e .
 ```
 
 ## Custom Congestion Control Algorithm
@@ -133,14 +134,13 @@ sysctl net.ipv4.tcp_allowed_congestion_control
 # Load specific modules (if needed)
 sudo modprobe tcp_cubic
 sudo modprobe tcp_reno
-sudo modprobe tcp_bbr  # for BBR testing
 ```
 
 ## Adding Custom Congestion Control Algorithm
 
 To test your custom congestion control algorithm:
 
-1. Load your kernel module or eBPF program
+1. Load your kernel module
 2. Verify it's available: `sysctl net.ipv4.tcp_available_congestion_control`
 3. Run tests including your algorithm:
    ```bash
